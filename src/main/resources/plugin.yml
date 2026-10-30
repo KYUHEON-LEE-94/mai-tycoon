@@ -1,0 +1,17 @@
+name: MaiTycoon
+version: 0.2.0
+main: kr.maitycoon.MaiTycoonPlugin
+api-version: '1.21.11'
+description: 농사로 시작하는 생활 타이쿤
+commands:
+  tycoon:
+    description: 타이쿤 정보, 시세, 마을 이동
+    aliases: [타이쿤]
+    usage: /tycoon [help|info|starter|price|village]
+    permission: maitycoon.play
+permissions:
+  maitycoon.play:
+    default: true
+  maitycoon.admin:
+    description: 마을 재건축, 시세 갱신, 마을 보호 무시
+    default: op

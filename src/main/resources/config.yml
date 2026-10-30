@@ -1,0 +1,54 @@
+# 원본 가격표가 아닌 개발용 임시 값 (YD). 변경 후 서버 재시작.
+# 판매가는 interval-minutes마다 변동합니다. 원본은 10분 주기와 상/하한이 있다는 것만 확인되었고
+# 상/하한 수치와 변동 산식은 미확인입니다.
+market:
+  interval-minutes: 10
+  min-percent: 50
+  max-percent: 180
+# 농산물 상인이 사들이는 작물. base: 기준가, swing: 1회 변동 폭(%, 클수록 시세가 크게 움직임)
+crops:
+  WHEAT: {base: 8, swing: 5}
+  CARROT: {base: 5, swing: 6}
+  POTATO: {base: 5, swing: 6}
+  BEETROOT: {base: 10, swing: 7}
+  MELON_SLICE: {base: 3, swing: 10}
+  PUMPKIN: {base: 18, swing: 8}
+  SUGAR_CANE: {base: 6, swing: 8}
+  CACTUS: {base: 6, swing: 8}
+  BAMBOO: {base: 2, swing: 10}
+  KELP: {base: 3, swing: 10}
+  SWEET_BERRIES: {base: 4, swing: 9}
+  GLOW_BERRIES: {base: 7, swing: 10}
+  COCOA_BEANS: {base: 9, swing: 10}
+  BROWN_MUSHROOM: {base: 6, swing: 12}
+  RED_MUSHROOM: {base: 8, swing: 12}
+  NETHER_WART: {base: 14, swing: 12}
+  TORCHFLOWER: {base: 40, swing: 15}
+  PITCHER_PLANT: {base: 60, swing: 15}
+# 씨앗 상인이 파는 품목의 고정 구매가. crops에도 있는 품목은 최고 시세보다 비싸야 합니다.
+seeds:
+  WHEAT_SEEDS: 2
+  BEETROOT_SEEDS: 3
+  MELON_SEEDS: 8
+  PUMPKIN_SEEDS: 8
+  CARROT: 20
+  POTATO: 20
+  SUGAR_CANE: 25
+  CACTUS: 25
+  BAMBOO: 10
+  KELP: 10
+  SWEET_BERRIES: 15
+  GLOW_BERRIES: 25
+  COCOA_BEANS: 35
+  BROWN_MUSHROOM: 25
+  RED_MUSHROOM: 30
+  NETHER_WART: 50
+  TORCHFLOWER_SEEDS: 100
+  PITCHER_POD: 150
+  BONE_MEAL: 5
+  STONE_HOE: 30
+  IRON_HOE: 120
+village:
+  # 서버 첫 실행 때 월드 스폰 주변 약 110칸 사방을 평탄화해 마을을 짓습니다.
+  # 이미 쓰던 월드에 설치한다면 먼저 false로 바꾸고 /tycoon village build 로 원하는 때에 지으세요.
+  auto-build: true

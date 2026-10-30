@@ -1,0 +1,8 @@
+.tools/
+target/
+.idea/
+*.iml
+.DS_Store
+server/
+
+dist/
