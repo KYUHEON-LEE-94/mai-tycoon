@@ -38,6 +38,7 @@ final class Lands implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
+    private static final long DOUBLE_SNEAK_MILLIS = 400;
     private static final int COLUMNS = 9, ROWS = 5, INFO = 45, DEX = 45, AUTO_PLANT = 46, MINE = 47, LAMP = 48, PERMIT = 49, FARM = 51, SHOW = 53;
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
@@ -47,6 +48,7 @@ final class Lands implements Listener {
     private final Map<UUID, net.kyori.adventure.bossbar.BossBar> banners = new HashMap<>();
     private final Map<UUID, String> shown = new HashMap<>();
     private final Map<UUID, Long> linkSent = new HashMap<>();
+    private final Map<UUID, Long> lastSneak = new HashMap<>();
     private final FarmMenu farmMenu;
     private final File file, footprintFile;
     private final long price, step;
@@ -235,7 +237,7 @@ final class Lands implements Listener {
         try {
             if (!store.load(player.getUniqueId()).landPermit()) return "구매 가능한 땅 · 땅 구매 이용권 필요";
         } catch (IOException e) { return null; }
-        return String.format("[Shift+F] 이 땅 구매 · %,d 골드", LandRegistry.price(price, step, owned));
+        return String.format("[Shift 두 번] 이 땅 구매 · %,d 골드", LandRegistry.price(price, step, owned));
     }
     void refreshBanners() {
         for (Player player : plugin.getServer().getOnlinePlayers()) {
@@ -285,11 +287,30 @@ final class Lands implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onHotkey(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
+        plugin.getLogger().info("Hotkey check: swap key from " + player.getName() + " sneaking=" + player.isSneaking());
         if (!player.isSneaking()) return;
         event.setCancelled(true);
+        hotkey(player);
+    }
+    /** Sneaking twice quickly is the same hotkey, and works even if a client never sends the swap key. */
+    @EventHandler(ignoreCancelled = true)
+    public void onSneak(PlayerToggleSneakEvent event) {
+        if (!event.isSneaking()) return;
+        Player player = event.getPlayer();
+        long now = System.currentTimeMillis();
+        Long last = lastSneak.put(player.getUniqueId(), now);
+        if (last == null || now - last > DOUBLE_SNEAK_MILLIS) return;
+        lastSneak.remove(player.getUniqueId());
+        plugin.getLogger().info("Hotkey check: double sneak from " + player.getName());
+        hotkey(player);
+    }
+    private void hotkey(Player player) {
         String text = bannerText(player);
-        if (text != null && text.startsWith("[")) openBuy(player);
-        else plugin.openDex(player);
+        boolean buy = text != null && text.startsWith("[");
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (buy) openBuy(player);
+            else plugin.openDex(player);
+        });
     }
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
