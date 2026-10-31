@@ -28,6 +28,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private Catalog catalog;
     private CustomCrops customCrops;
     private Lamps lamps;
+    private MiniMap miniMap;
     private AutoPlanting autoPlanting;
     private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
@@ -86,6 +87,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             village.onShowcase(customCrops::plantShowcase);
             lamps = new Lamps(this, store, loadLamp());
             getServer().getPluginManager().registerEvents(lamps, this);
+            miniMap = new MiniMap(this);
+            getServer().getPluginManager().registerEvents(miniMap, this);
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
             if (plantPrice < 1 || plantUses < 1) throw new IOException("Invalid auto-plant settings");
             autoPlanting = new AutoPlanting(this, store, village, lands, plantPrice, plantUses);
@@ -105,6 +108,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             }, 20L, 20L);
             getServer().getScheduler().runTaskTimer(this, () -> village.lookAtPlayers(), 20L, 10L);
             getServer().getScheduler().runTaskTimer(this, () -> lands.refreshBanners(), 40L, 20L);
+            getServer().getScheduler().runTaskTimer(this, () -> miniMap.refresh(), 40L, 20L);
             getServer().getScheduler().runTask(this, () -> {
                 customCrops.start();
                 if (village.built()) { getServer().setSpawnRadius(0); village.upgradeStructures(); village.ensureNpcs(); }
@@ -170,6 +174,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         Component title = Component.text(text, NamedTextColor.GOLD);
         return shop.drawn(player) ? title.append(new ShopTitle().spaceRight(BANNER_SHIFT).build()) : title;
     }
+    boolean packDrawn(Player player) { return shop.drawn(player); }
     Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
     void openLandTool(Player player, boolean lamp) throws IOException {
         if (lamp) lamps.open(player);

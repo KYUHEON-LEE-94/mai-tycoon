@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.List;
 import java.util.zip.*;
 import javax.imageio.ImageIO;
+import kr.maitycoon.MiniMapTitle;
 import kr.maitycoon.ShopLayout;
 
 /**
@@ -32,6 +33,7 @@ public class GeneratePack {
         backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식"), "상품 클릭 · 구매", new Color(0x3F6C42)));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
         npcSkins();
+        miniMapFonts();
         // The land banner is only text; an empty white bar keeps it from looking like a boss fight.
         png("assets/minecraft/textures/gui/sprites/boss_bar/white_background.png", new BufferedImage(182, 5, BufferedImage.TYPE_INT_ARGB));
         png("assets/minecraft/textures/gui/sprites/boss_bar/white_progress.png", new BufferedImage(182, 5, BufferedImage.TYPE_INT_ARGB));
@@ -364,6 +366,31 @@ public class GeneratePack {
         image.setRGB(image.getWidth()-1,image.getHeight()-1,0x01FFFFFF);
         return image;
     }
+    static final int MINIMAP_TOP = 7, MINIMAP_FRAME = MiniMapTitle.MAP_SIZE + MiniMapTitle.FRAME_MARGIN * 2;
+    /** One white cell per row font; the second glyph cancels the gap the client leaves after every bitmap glyph. */
+    static void miniMapFonts() throws IOException {
+        var cell = new BufferedImage(MiniMapTitle.CELL_SIZE * SCALE, MiniMapTitle.CELL_SIZE * SCALE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = cell.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, cell.getWidth(), cell.getHeight());
+        g.dispose();
+        png("assets/maitycoon/textures/gui/minimap_cell.png", cell);
+        for (int row = 0; row < MiniMapTitle.CELLS; row++) {
+            text("assets/maitycoon/font/mm" + row + ".json", "{\"providers\":[" + bitmap("minimap_cell.png", MiniMapTitle.CELL_SIZE, MiniMapTitle.CELL_SIZE - row * MiniMapTitle.CELL_SIZE, "\\ue230")
+                + ",{\"type\":\"space\",\"advances\":{\"\\ue231\":-1}}]}");
+        }
+        // Bitmap glyphs over 256px are dropped by the client, so the frame is drawn at 3x rather than SCALE.
+        int frameScale = 3;
+        var frame = new BufferedImage(MINIMAP_FRAME * frameScale, MINIMAP_FRAME * frameScale, BufferedImage.TYPE_INT_ARGB);
+        g = frame.createGraphics();
+        g.setColor(new Color(0x211E1C));
+        g.fillRect(0, 0, frame.getWidth(), frame.getHeight());
+        g.setColor(new Color(0xE9D49C));
+        g.setStroke(new BasicStroke(frameScale));
+        g.drawRect(1, 1, frame.getWidth() - 3, frame.getHeight() - 3);
+        g.dispose();
+        png("assets/maitycoon/textures/gui/minimap_frame.png", frame);
+    }
     static BufferedImage tabHighlight() {
         var image=new BufferedImage(18*SCALE,17*SCALE,BufferedImage.TYPE_INT_ARGB);
         var g=paint(image);box(g,new Color(0xF2DDA4),1,15,16,1,0);g.dispose();
@@ -405,6 +432,7 @@ public class GeneratePack {
                 13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800).get(kind) + row * 4 + col)));
         }
         providers.add(bitmap("tab.png", 17, 13 - 90, "\\ue210"));
+        providers.add(bitmap("minimap_frame.png", MINIMAP_FRAME, MINIMAP_TOP - 2, "\\ue221"));
         return "{\"providers\":[" + providers + "]}";
     }
     static String digitFont(int height, int ascent) {
