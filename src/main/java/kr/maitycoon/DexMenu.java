@@ -32,14 +32,14 @@ final class DexMenu implements Listener {
     void open(Player player) {
         Holder holder = new Holder();
         holder.page = dex.pages().keySet().iterator().next();
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, Component.text("수집 도감"));
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "수집 도감"));
         plugin.guarded(player, () -> render(holder, player));
         player.openInventory(holder.inventory);
     }
     private void render(Holder holder, Player player) throws IOException {
         Profile profile = store.load(player.getUniqueId());
         Inventory inventory = holder.inventory;
-        Ui.frame(inventory);
+        plugin.frame(inventory, player);
         holder.tabs.clear();
         holder.entries.clear();
         int slot = FIRST_TAB;

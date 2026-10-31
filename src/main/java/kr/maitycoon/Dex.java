@@ -4,13 +4,15 @@ import java.util.*;
 
 /** Collection book: pages of item ids, plus rewards that are granted when a count is reached. */
 public final class Dex {
-    public record Reward(long coins, long zcoin, boolean landPermit) {
-        public Reward { if (coins < 0 || zcoin < 0) throw new IllegalArgumentException("Invalid reward"); }
+    public record Reward(long coins, long zcoin, boolean landPermit, long lamps) {
+        public Reward { if (coins < 0 || zcoin < 0 || lamps < 0) throw new IllegalArgumentException("Invalid reward"); }
+        public Reward(long coins, long zcoin, boolean landPermit) { this(coins, zcoin, landPermit, 0); }
         public String describe() {
             List<String> parts = new ArrayList<>();
             if (coins > 0) parts.add(coins + " YD");
             if (zcoin > 0) parts.add("즈코인 " + zcoin + "개");
             if (landPermit) parts.add("땅 구매 이용권");
+            if (lamps > 0) parts.add("생활 램프 " + lamps + "개");
             return String.join(" + ", parts);
         }
     }

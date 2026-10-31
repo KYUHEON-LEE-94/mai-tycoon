@@ -135,13 +135,13 @@ final class Lands implements Listener {
         World world = village.world();
         if (world == null || !player.getWorld().equals(world)) { plugin.tell(player, "땅은 마을이 있는 월드에서만 살 수 있습니다."); return; }
         Holder holder = new Holder();
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, Component.text("땅 지도"));
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "땅 지도"));
         plugin.guarded(player, () -> render(holder, player));
         player.openInventory(holder.inventory);
     }
     private void render(Holder holder, Player player) throws IOException {
         Inventory inventory = holder.inventory;
-        Ui.frame(inventory);
+        plugin.frame(inventory, player);
         holder.chunks.clear();
         Profile profile = store.load(player.getUniqueId());
         int owned = registry.count(player.getUniqueId());

@@ -27,7 +27,9 @@ public class GeneratePack {
     public static void main(String[] args) throws Exception {
         System.setProperty("java.awt.headless", "true");
         backgroundTiles("sell", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "특산"), "모두 판매", new Color(0x3F8F4F)));
-        backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "도구", "특산"), "상품 클릭 · 구매", new Color(0x3F6C42)));
+        backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "비료", "특산"), "상품 클릭 · 구매", new Color(0x3F6C42)));
+        backgroundTiles("panel", panel());
+        backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식"), "상품 클릭 · 구매", new Color(0x3F6C42)));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
         npcSkins();
         customCrops();
@@ -56,6 +58,7 @@ public class GeneratePack {
             }
         }
         if (args.length > 0) ImageIO.write(preview(), "png", Path.of(args[0]).toFile());
+        if (args.length > 1) cropPreview(Path.of(args[1]));
         System.out.println(out + " " + Files.size(out) + " bytes");
     }
     static final int TILE_W = ShopLayout.TILE_WIDTH, TILE_H = ShopLayout.TILE_HEIGHT, TILE_ROWS = (HEIGHT + TILE_H - 1) / TILE_H;
@@ -125,13 +128,21 @@ public class GeneratePack {
             outline(g,new Color(0x887D70),x+40,y+8,31,9,0);
             centered(g,title.contains("농산물")?"판매":"구매",font(5,true),new Color(0xF07C72),x+47,y+12.5);
         }
-        for(int i=0;i<tabs.size();i++)centered(g,tabs.get(i),font(5,true),CREAM,16+i*18,98);
-        centered(g,title.contains("농산물")?"모두 판매":"상품 클릭 · 구매",font(5,true),CREAM,133,98);
-        centered(g,"수량",font(5,false),CREAM,30,113);
-        centered(g,"◀",font(7,true),CREAM,70,113);
-        centered(g,"▶",font(7,true),CREAM,106,113);
+        for(int i=0;i<tabs.size();i++){
+            button(g,7+i*18,90,17,15,new Color(0x3A332E));
+            centered(g,tabs.get(i),font(5,true),CREAM,15.5+i*18,97.5);
+        }
+        boolean selling=title.contains("농산물");
+        button(g,97,90,72,15,selling?new Color(0x3F6C42):new Color(0x2A2725));
+        centered(g,selling?"모두 판매":"상품 클릭 · 구매",font(selling?7:5,true),CREAM,133,97.5);
+        button(g,25,108,36,10,new Color(0x3A332E));
+        centered(g,"수량",font(5,false),CREAM,33,113);
+        button(g,61,108,18,10,new Color(0x3A332E));
+        centered(g,"◀",font(6,true),CREAM,70,113);
+        button(g,97,108,18,10,new Color(0x3A332E));
+        centered(g,"▶",font(6,true),CREAM,106,113);
         centered(g,"●",font(7,true),new Color(0xFFD35E),10,123);
-        centered(g,"시세 변경",font(5,false),CREAM,150,113);
+        centered(g,title.contains("농산물") ? "시세 변경" : "고정 가격",font(5,false),CREAM,150,113);
         box(g,new Color(0x181818),3,130,170,89,0);
         for(int row=0;row<4;row++)for(int col=0;col<9;col++) {
             int y=row==3?198:140+row*18;
@@ -143,7 +154,10 @@ public class GeneratePack {
     /** Item, seed and three growth sprites per custom crop, plus the item definitions that select them. */
     record CropArt(String id, int fruit, int shade) {}
     static final List<CropArt> CROPS = List.of(new CropArt("cabbage", 0x7DBB4A, 0x4E8A2E), new CropArt("tomato", 0xD8392B, 0x9E2118), new CropArt("corn", 0xF0C93A, 0xC79A1E),
-        new CropArt("strawberry", 0xE23B52, 0xA8243A), new CropArt("grape", 0x6B3FA0, 0x472A70), new CropArt("pineapple", 0xE3A62F, 0xA8741B));
+        new CropArt("strawberry", 0xE23B52, 0xA8243A), new CropArt("grape", 0x6B3FA0, 0x472A70), new CropArt("pineapple", 0xE3A62F, 0xA8741B),
+        new CropArt("onion", 0xE8BF70, 0xA56D38), new CropArt("radish", 0xF0EBD5, 0xB6C4A0),
+        new CropArt("eggplant", 0x8755AF, 0x452C68), new CropArt("cucumber", 0x65A548, 0x286135),
+        new CropArt("bell_pepper", 0xEEBD34, 0xC66E24), new CropArt("blueberry", 0x6577C7, 0x354679));
     static void customCrops() throws IOException {
         var items = new StringJoiner(",");
         var stages = new StringJoiner(",");
@@ -171,44 +185,118 @@ public class GeneratePack {
     static BufferedImage sprite() { return new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB); }
     static void dot(Graphics2D g, int color, int x, int y, int w, int h) { g.setColor(new Color(color)); g.fillOval(x, y, w, h); }
     static void rect(Graphics2D g, int color, int x, int y, int w, int h) { g.setColor(new Color(color)); g.fillRect(x, y, w, h); }
+    // Native 32px pixel art: individual silhouettes, a consistent upper-left light and dark outlines.
     static BufferedImage cropIcon(CropArt crop) {
-        var image = sprite();
+        var image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = image.createGraphics();
-        int leaf = 0x3E8E3A, leafDark = 0x2C6B2A;
+        int green=0x508C3D, darkGreen=0x294C32, highlight=0xFFF0BC;
         switch (crop.id()) {
-            case "cabbage" -> { dot(g, crop.shade(), 1, 2, 14, 13); dot(g, crop.fruit(), 3, 3, 10, 11); dot(g, 0xB9DE86, 5, 5, 6, 7); rect(g, leafDark, 7, 4, 1, 10); }
-            case "tomato" -> { dot(g, crop.shade(), 2, 3, 12, 12); dot(g, crop.fruit(), 3, 3, 10, 10); rect(g, leaf, 5, 2, 6, 2); rect(g, leaf, 7, 1, 2, 3); rect(g, 0xF08A7E, 5, 6, 2, 2); }
-            case "corn" -> { dot(g, crop.shade(), 4, 1, 8, 13); dot(g, crop.fruit(), 5, 1, 6, 12); for (int y = 3; y < 12; y += 2) rect(g, crop.shade(), 5, y, 6, 1); rect(g, leaf, 2, 8, 3, 7); rect(g, leaf, 11, 8, 3, 7); rect(g, leafDark, 5, 12, 6, 3); }
-            case "strawberry" -> { g.setColor(new Color(crop.shade())); g.fillPolygon(new int[]{1, 15, 8}, new int[]{4, 4, 15}, 3); g.setColor(new Color(crop.fruit())); g.fillPolygon(new int[]{3, 13, 8}, new int[]{4, 4, 13}, 3); rect(g, leaf, 3, 2, 10, 2); rect(g, leaf, 7, 1, 2, 2); for (int[] s : new int[][]{{5, 6}, {9, 6}, {7, 8}, {6, 10}, {9, 9}}) rect(g, 0xF7E27A, s[0], s[1], 1, 1); }
-            case "grape" -> { for (int[] b : new int[][]{{2, 3}, {6, 3}, {10, 3}, {4, 6}, {8, 6}, {6, 9}, {3, 8}, {9, 9}, {6, 12}}) { dot(g, crop.shade(), b[0], b[1], 5, 5); dot(g, crop.fruit(), b[0], b[1], 4, 4); } rect(g, leaf, 7, 0, 2, 3); }
-            default -> { dot(g, crop.shade(), 3, 5, 10, 11); dot(g, crop.fruit(), 4, 5, 8, 10); for (int y = 7; y < 14; y += 2) rect(g, crop.shade(), 4, y, 8, 1); for (int x : new int[]{4, 7, 10}) rect(g, leaf, x, 1, 2, 5); rect(g, leafDark, 6, 3, 4, 3); }
-        }
-        g.dispose();
-        return image;
-    }
-    static BufferedImage seedIcon(CropArt crop) {
-        var image = sprite();
-        Graphics2D g = image.createGraphics();
-        for (int[] s : new int[][]{{3, 4}, {9, 3}, {6, 8}, {11, 9}, {3, 11}}) { dot(g, crop.shade(), s[0], s[1], 3, 3); rect(g, crop.fruit(), s[0] + 1, s[1], 1, 1); }
-        g.dispose();
-        return image;
-    }
-    static BufferedImage plantStage(CropArt crop, int stage) {
-        var image = sprite();
-        Graphics2D g = image.createGraphics();
-        int leaf = 0x4C9A3F, dark = 0x2F6E2C;
-        if (stage == 0) { rect(g, dark, 7, 11, 2, 5); rect(g, leaf, 5, 10, 3, 2); rect(g, leaf, 8, 9, 3, 2); }
-        else {
-            rect(g, dark, 7, 5, 2, 11);
-            for (int y = 6; y < 15; y += 3) { rect(g, leaf, 3, y, 5, 2); rect(g, leaf, 8, y - 1, 5, 2); }
-            if (stage == 1) dot(g, leaf, 5, 2, 6, 5);
-            else {
-                dot(g, leaf, 3, 1, 10, 8);
-                for (int[] f : new int[][]{{3, 3}, {9, 2}, {6, 6}, {10, 8}, {2, 9}}) dot(g, crop.fruit(), f[0], f[1], 4, 4);
+            case "cabbage" -> {
+                dot(g,darkGreen,2,8,28,22);dot(g,crop.shade(),4,6,24,24);dot(g,crop.fruit(),7,5,20,23);
+                dot(g,0xAFD46F,11,7,12,17);dot(g,0xCFE899,14,9,7,12);
+                rect(g,0x638F43,14,10,2,17);rect(g,0x90B956,8,15,6,2);rect(g,0x90B956,17,20,7,2);
+            }
+            case "tomato" -> {
+                dot(g,crop.shade(),3,8,27,22);dot(g,crop.fruit(),4,7,24,21);dot(g,0xF36842,7,9,13,12);
+                rect(g,darkGreen,14,2,3,7);rect(g,green,8,6,16,3);rect(g,green,12,4,8,8);
+                rect(g,0xFFB58A,8,11,4,3);rect(g,0xEF7950,7,15,2,3);
+            }
+            case "corn" -> {
+                dot(g,crop.shade(),9,2,14,27);dot(g,crop.fruit(),10,2,11,25);
+                for(int y=5;y<25;y+=4)for(int x=11;x<22;x+=4){rect(g,0xFFE67B,x,y,2,2);rect(g,crop.shade(),x,y+2,3,1);}
+                g.setColor(new Color(green));g.fillPolygon(new int[]{3,10,17,10},new int[]{12,17,29,26},4);
+                g.setColor(new Color(darkGreen));g.fillPolygon(new int[]{28,22,16,24},new int[]{9,18,30,25},4);
+            }
+            case "strawberry" -> {
+                g.setColor(new Color(crop.shade()));g.fillPolygon(new int[]{3,29,26,16,6},new int[]{8,8,20,30,21},5);
+                g.setColor(new Color(crop.fruit()));g.fillPolygon(new int[]{5,26,23,15,8},new int[]{9,9,20,27,20},5);
+                rect(g,green,5,6,22,3);rect(g,green,10,3,12,9);rect(g,darkGreen,15,1,3,5);
+                for(int[] xy:new int[][]{{9,12},{17,11},{22,14},{12,18},{18,20},{14,24}})rect(g,highlight,xy[0],xy[1],2,2);
+            }
+            case "grape", "blueberry" -> {
+                int[][] fruit=crop.id().equals("grape")?new int[][]{{4,6},{13,5},{21,7},{8,14},{17,14},{12,22}}:new int[][]{{3,13},{13,5},{21,13},{11,21}};
+                rect(g,darkGreen,15,1,2,8);dot(g,green,5,2,10,5);
+                for(int[] xy:fruit){dot(g,crop.shade(),xy[0],xy[1],10,10);dot(g,crop.fruit(),xy[0],xy[1],8,8);rect(g,0xB9ACED,xy[0]+2,xy[1]+2,2,2);
+                    if(crop.id().equals("blueberry")){rect(g,crop.shade(),xy[0]+4,xy[1]+4,3,1);rect(g,crop.shade(),xy[0]+5,xy[1]+3,1,3);}}
+            }
+            case "pineapple" -> {
+                dot(g,crop.shade(),6,11,21,20);dot(g,crop.fruit(),7,10,18,19);
+                for(int y=13;y<28;y+=4)for(int x=9+(y%8==1?2:0);x<23;x+=5){rect(g,crop.shade(),x,y,2,2);rect(g,0xFAD56B,x,y-1,2,1);}
+                for(int[] leaf:new int[][]{{7,3,3,9},{12,0,3,12},{17,1,3,11},{22,4,3,8}})rect(g,green,leaf[0],leaf[1],leaf[2],leaf[3]);
+                rect(g,darkGreen,14,6,3,7);
+            }
+            case "onion" -> {
+                dot(g,crop.shade(),4,10,25,20);dot(g,crop.fruit(),5,9,22,20);dot(g,0xF6DFA4,10,10,12,16);
+                rect(g,crop.shade(),15,9,2,19);rect(g,green,12,2,3,9);rect(g,darkGreen,17,1,3,9);
+                rect(g,0x9D754B,12,29,2,2);rect(g,0x9D754B,18,29,2,2);
+            }
+            case "radish" -> {
+                dot(g,crop.shade(),8,10,17,18);dot(g,crop.fruit(),8,9,15,18);rect(g,0xFFFFFF,11,12,4,10);
+                rect(g,crop.fruit(),14,25,5,4);rect(g,crop.shade(),16,29,2,2);
+                rect(g,darkGreen,14,2,3,11);rect(g,green,6,4,8,5);rect(g,green,18,2,8,5);rect(g,0x76AE50,10,1,4,8);
+            }
+            case "eggplant" -> {
+                dot(g,crop.shade(),6,11,20,19);dot(g,crop.fruit(),7,9,17,19);dot(g,0xAC7DC8,9,13,5,11);
+                rect(g,green,12,7,12,5);rect(g,darkGreen,18,2,3,7);rect(g,0xD9B3DF,10,14,2,4);
+            }
+            case "cucumber" -> {
+                dot(g,crop.shade(),8,3,15,28);dot(g,crop.fruit(),8,3,12,26);rect(g,0x98C363,10,6,3,18);
+                for(int y=8;y<27;y+=5){rect(g,darkGreen,16,y,2,2);rect(g,0xA3C978,11,y+2,1,1);}rect(g,darkGreen,14,0,3,4);
+            }
+            case "bell_pepper" -> {
+                dot(g,crop.shade(),3,9,27,21);dot(g,crop.fruit(),4,8,11,20);dot(g,crop.fruit(),13,8,15,20);
+                dot(g,0xF5D85B,11,9,10,20);rect(g,highlight,7,12,3,7);rect(g,darkGreen,15,2,3,8);rect(g,green,12,7,10,3);
             }
         }
-        g.dispose();
-        return image;
+        g.dispose();return image;
+    }
+    static BufferedImage seedIcon(CropArt crop) {
+        var image=new BufferedImage(32,32,BufferedImage.TYPE_INT_ARGB);var g=image.createGraphics();
+        rect(g,0x634B35,5,3,22,28);rect(g,0xD8BC83,6,4,20,25);rect(g,0xF1DCAB,7,7,18,20);
+        rect(g,crop.shade(),6,4,20,4);rect(g,crop.fruit(),7,5,18,2);
+        g.drawImage(cropIcon(crop),9,9,14,14,null);rect(g,0xB59762,9,25,14,2);
+        g.dispose();return image;
+    }
+    static BufferedImage plantStage(CropArt crop, int stage) {
+        var image=new BufferedImage(32,32,BufferedImage.TYPE_INT_ARGB);var g=image.createGraphics();
+        int green=0x548F3C,dark=0x2A5834,light=0x8EBE58;
+        if(stage==0){rect(g,dark,15,24,2,8);dot(g,green,9,22,7,4);dot(g,light,17,19,7,5);}
+        else {
+            String id=crop.id();
+            if(Set.of("cabbage","onion","radish","pineapple").contains(id)) {
+                for(int[] xy:new int[][]{{3,20},{9,16},{17,17},{22,21}}){dot(g,dark,xy[0],xy[1],9,11);dot(g,green,xy[0],xy[1],7,8);}
+                if(stage==2)g.drawImage(cropIcon(crop),6,id.equals("pineapple")?1:10,22,id.equals("pineapple")?30:22,null);
+            } else if(id.equals("corn")) {
+                rect(g,dark,15,stage==1?12:3,3,29);for(int y=12;y<30;y+=6){rect(g,green,5,y,10,3);rect(g,light,18,y-3,9,3);}
+                if(stage==2){g.drawImage(cropIcon(crop),5,7,12,19,null);g.drawImage(cropIcon(crop),17,13,11,17,null);rect(g,0xCEB96B,13,1,7,3);}
+            } else {
+                boolean vine=id.equals("grape")||id.equals("cucumber");
+                if(vine){rect(g,0x886443,7,3,2,29);rect(g,0x886443,25,3,2,29);rect(g,0xA58354,7,8,20,2);rect(g,0xA58354,7,21,20,2);}
+                int top=stage==1?13:4;rect(g,dark,15,top,2,32-top);
+                for(int y=top+2;y<28;y+=6){dot(g,dark,4,y,12,8);dot(g,green,5,y,10,6);dot(g,green,16,y-2,12,8);dot(g,light,18,y-2,8,4);}
+                if(stage==1){dot(g,0xF0DFA5,13,11,4,4);}else {
+                    g.drawImage(cropIcon(crop),3,11,13,13,null);g.drawImage(cropIcon(crop),17,15,13,13,null);
+                    if(id.equals("strawberry")||id.equals("blueberry"))g.drawImage(cropIcon(crop),10,23,11,9,null);
+                }
+            }
+        }
+        g.dispose();return image;
+    }
+    static void cropPreview(Path path) throws IOException {
+        var image=new BufferedImage(960, CROPS.size()*150+60,BufferedImage.TYPE_INT_RGB);var g=paint(image);
+        g.setColor(new Color(0x211E1C));g.fillRect(0,0,image.getWidth(),image.getHeight());
+        g.setColor(new Color(0xE9D49C));g.setFont(new Font("Nanum Gothic",Font.BOLD,22));
+        g.drawString("커스텀 작물 · 수확물 / 씨앗 / 새싹 / 성장 / 수확 가능",24,36);
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        for(int i=0;i<CROPS.size();i++){
+            CropArt crop=CROPS.get(i);int y=60+i*150;
+            g.setColor(new Color(0x302B29));g.fillRect(12,y,936,140);
+            int index=ShopLayout.ITEM_IDS.indexOf(crop.id().toUpperCase(Locale.ROOT));
+            g.setColor(new Color(0xF1E7CE));g.setFont(new Font("Nanum Gothic",Font.BOLD,20));g.drawString(ShopLayout.ITEM_NAMES.get(index),28,y+70);
+            BufferedImage[] sprites={cropIcon(crop),seedIcon(crop),plantStage(crop,0),plantStage(crop,1),plantStage(crop,2)};
+            for(int j=0;j<sprites.length;j++)g.drawImage(sprites[j],160+j*155,y+8,124,124,null);
+        }
+        g.dispose();ImageIO.write(image,"png",path.toFile());
     }
     /** Repaints four rarely used vanilla default skins; without the pack the NPCs simply keep those defaults. */
     static void npcSkins() throws IOException {
@@ -239,6 +327,29 @@ public class GeneratePack {
         }
         g.dispose();
         return image;
+    }
+    static void button(Graphics2D g, int x, int y, int w, int h, Color fill) {
+        box(g,fill,x,y,w,h,1);
+        outline(g,new Color(0x887D70),x,y,w,h,1);
+    }
+    /** Dark panel with a header line and one well per chest slot, for every menu without its own layout. */
+    static BufferedImage panel() {
+        var image=new BufferedImage(WIDTH*SCALE,HEIGHT*SCALE,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=paint(image);
+        box(g,new Color(0x211E1C),0,0,WIDTH,HEIGHT,0);
+        box(g,new Color(0x322921),0,0,WIDTH,14,0);
+        g.setColor(new Color(0xE9D49C));g.fillRect(0,14*SCALE,WIDTH*SCALE,SCALE/2);
+        for(int row=0;row<6;row++)for(int col=0;col<9;col++){
+            box(g,new Color(0x393632),7+col*18,17+row*18,18,18,0);
+            box(g,new Color(0x2A2725),8+col*18,18+row*18,16,16,0);
+        }
+        box(g,new Color(0x181818),3,130,170,89,0);
+        for(int row=0;row<4;row++)for(int col=0;col<9;col++){
+            int y=row==3?198:140+row*18;
+            box(g,new Color(0x393632),7+col*18,y-1,18,18,0);
+            box(g,new Color(0x252423),8+col*18,y,16,16,0);
+        }
+        g.dispose();return image;
     }
     static BufferedImage tabHighlight() {
         var image=new BufferedImage(18*SCALE,17*SCALE,BufferedImage.TYPE_INT_ARGB);
@@ -275,10 +386,10 @@ public class GeneratePack {
     }
     static String guiFont() {
         var providers = new StringJoiner(",");
-        for (int kind = 0; kind < 2; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
+        for (int kind = 0; kind < 4; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
             int h = Math.min(TILE_H, HEIGHT - row * TILE_H);
-            providers.add(bitmap((kind == 0 ? "sell" : "buy") + "_" + row + "_" + col + ".png", h,
-                13 - row * TILE_H, String.format("\\u%04x", (kind == 0 ? 0xE300 : 0xE400) + row * 4 + col)));
+            providers.add(bitmap(List.of("sell", "buy", "build", "panel").get(kind) + "_" + row + "_" + col + ".png", h,
+                13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800).get(kind) + row * 4 + col)));
         }
         providers.add(bitmap("tab.png", 17, 13 - 90, "\\ue210"));
         return "{\"providers\":[" + providers + "]}";

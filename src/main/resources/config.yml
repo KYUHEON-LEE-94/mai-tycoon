@@ -5,7 +5,11 @@ market:
   interval-minutes: 10
   min-percent: 50
   max-percent: 180
-# 농산물 상인이 사들이는 작물. base: 기준가, swing: 1회 변동 폭(%), category: 상점 탭
+  # 매 회차 전체 범위에서 독립 무작위 추첨. 서버 전체 품목별 판매량을 합산합니다.
+  volume-threshold: 256
+  pressure-per-batch: 10
+  max-pressure: 60
+# 농산물 상인이 사들이는 작물. base: 기준가, swing: 이전 버전 호환 필드(현재 추첨에서 미사용), category: 상점 탭
 crops:
   WHEAT: {base: 8, swing: 5, category: 곡물·채소}
   CARROT: {base: 5, swing: 6, category: 곡물·채소}
@@ -45,9 +49,7 @@ seeds:
   BROWN_MUSHROOM: {price: 25, category: 모종}
   RED_MUSHROOM: {price: 30, category: 모종}
   NETHER_WART: {price: 50, category: 모종}
-  BONE_MEAL: {price: 5, category: 농기구}
-  STONE_HOE: {price: 30, category: 농기구}
-  IRON_HOE: {price: 120, category: 농기구}
+  BONE_MEAL: {price: 5, category: 비료}
 # 바닐라에 없는 작물. 배추·파인애플·포도는 원본 언급이 있고 나머지 품목과 모든 수치는 개발용 값입니다.
 # 씨앗은 씨앗 상인이 팔고, 경작지에 심습니다. chunk-limit은 원본의 청크당 100개 표기를 따릅니다.
 custom-crops:
@@ -59,6 +61,12 @@ custom-crops:
     STRAWBERRY: {name: 딸기, seed-name: 딸기 모종, base: 42, swing: 12, seed-price: 24, grow-minutes: 30, yield: [1, 3]}
     GRAPE: {name: 포도, seed-name: 포도 묘목, base: 55, swing: 12, seed-price: 32, grow-minutes: 40, yield: [1, 2]}
     PINEAPPLE: {name: 파인애플, seed-name: 파인애플 모종, base: 80, swing: 14, seed-price: 48, grow-minutes: 60, yield: [1, 2]}
+    ONION: {name: 양파, seed-name: 양파 씨앗, base: 18, swing: 10, seed-price: 10, grow-minutes: 12, yield: [1, 3]}
+    RADISH: {name: 무, seed-name: 무 씨앗, base: 22, swing: 10, seed-price: 12, grow-minutes: 18, yield: [1, 3]}
+    EGGPLANT: {name: 가지, seed-name: 가지 씨앗, base: 38, swing: 10, seed-price: 20, grow-minutes: 28, yield: [1, 3]}
+    CUCUMBER: {name: 오이, seed-name: 오이 씨앗, base: 28, swing: 10, seed-price: 16, grow-minutes: 22, yield: [1, 3]}
+    BELL_PEPPER: {name: 파프리카, seed-name: 파프리카 씨앗, base: 46, swing: 10, seed-price: 25, grow-minutes: 35, yield: [1, 3]}
+    BLUEBERRY: {name: 블루베리, seed-name: 블루베리 씨앗, base: 60, swing: 10, seed-price: 34, grow-minutes: 45, yield: [1, 2]}
 # 수집 도감. 원본은 300개 규모이며 등록 방식은 미확인이라 아이템 1개를 제출하는 방식으로 구현했습니다.
 dex:
   pages:
@@ -70,10 +78,15 @@ dex:
   # zcoin(즈코인)은 YD와 별개의 재화입니다. coins(YD)와 72개 구간은 개발용 값입니다.
   rewards:
     10: {coins: 500, zcoin: 1}
-    20: {coins: 1500, zcoin: 5}
+    20: {coins: 1500, zcoin: 5, lamp: 1}
     30: {coins: 3000, zcoin: 5, land-permit: true}
     50: {coins: 10000, zcoin: 10}
     72: {coins: 30000, zcoin: 20}
+# 생활 램프 옵션 범위. 수치는 2차 자료의 괭이 옵션 기재를 따릅니다. 적용 절차와 옵션 교체 규칙은 원본 미확인이라 제안 구현입니다.
+lamp:
+  CROP: {min-percent: 20, max-percent: 50, min-amount: 1, max-amount: 3}
+  SEED: {min-percent: 20, max-percent: 50, min-amount: 1, max-amount: 3}
+  BONE_MEAL: {min-percent: 10, max-percent: 50, min-amount: 1, max-amount: 2}
 # 청크 단위 땅. 최대 9개는 원본 기준이고, 가격은 미확인이라 개발용 값입니다.
 # n번째 땅 가격 = price + step × (이미 보유한 땅 수)
 land:
@@ -90,3 +103,30 @@ village:
   # true면 서버 첫 실행 때 월드 스폰 주변 약 110칸 사방을 평탄화해 마을을 짓습니다.
   # 기본값은 기존 월드를 보존하기 위해 false입니다. 마을은 /tycoon village build confirm 으로 짓습니다.
   auto-build: false
+
+# 건축 자재 구매가 (개발용 YD). 수량 선택 또는 우클릭 64개 구매.
+building-shop:
+  OAK_LOG: {price: 12, category: 목재}
+  SPRUCE_LOG: {price: 12, category: 목재}
+  BIRCH_LOG: {price: 12, category: 목재}
+  CHERRY_LOG: {price: 18, category: 목재}
+  OAK_PLANKS: {price: 3, category: 목재}
+  SPRUCE_PLANKS: {price: 3, category: 목재}
+  BIRCH_PLANKS: {price: 3, category: 목재}
+  CHERRY_PLANKS: {price: 5, category: 목재}
+  COBBLESTONE: {price: 2, category: 석재}
+  STONE: {price: 3, category: 석재}
+  STONE_BRICKS: {price: 4, category: 석재}
+  DEEPSLATE_BRICKS: {price: 5, category: 석재}
+  BRICKS: {price: 8, category: 석재}
+  SMOOTH_QUARTZ: {price: 16, category: 석재}
+  SANDSTONE: {price: 4, category: 석재}
+  TERRACOTTA: {price: 5, category: 석재}
+  GLASS: {price: 4, category: 장식}
+  WHITE_STAINED_GLASS: {price: 6, category: 장식}
+  WHITE_CONCRETE: {price: 6, category: 장식}
+  WHITE_WOOL: {price: 8, category: 장식}
+  LANTERN: {price: 24, category: 장식}
+  IRON_CHAIN: {price: 12, category: 장식}
+  OAK_LEAVES: {price: 3, category: 장식}
+  SPRUCE_TRAPDOOR: {price: 6, category: 장식}

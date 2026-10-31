@@ -27,19 +27,26 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private ResourcePack resourcePack;
     private Catalog catalog;
     private CustomCrops customCrops;
+    private Lamps lamps;
     private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
-    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land");
+    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp");
     private static final String CUSTOM_CATEGORY = "특산물";
-    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal");
+    private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
+    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop");
     @Override public void onEnable() {
         saveDefaultConfig();
+        // Merge new sections and crop entries into old installations without replacing configured values.
+        getConfig().options().copyDefaults(true);
+        saveConfig();
+        reloadConfig(); // Materialize defaults for getters with explicit fallback values.
         try {
             store = new ProfileStore(getDataFolder().toPath().resolve("players"));
             journal = new TransactionJournal(getDataFolder().toPath().resolve("journal"));
             for (var entry : journal.interrupted()) {
                 getLogger().warning("Interrupted trade " + entry.id() + " for " + entry.player() + " at " + entry.createdAt() + ": " + entry.type() + " " + entry.detail());
             }
+            retireOldSettings();
             catalog = new Catalog(this, getConfig().getConfigurationSection("custom-crops.crops"));
             market = loadMarket();
             restoreMarket();
@@ -47,7 +54,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             Map<String, Shop.Listing> seeds = loadSeeds();
             marketInterval = getConfig().getInt("market.interval-minutes") * 60_000L;
             if (marketInterval < 60_000) throw new IOException("Invalid market interval");
-            shop = new Shop(this, market, store, catalog, crops, seeds);
+            shop = new Shop(this, market, store, catalog, crops, seeds, loadBuilding());
             dexMenu = new DexMenu(this, loadDex(), store);
             Map<String, Consumer<Player>> npcActions = new HashMap<>();
             village = new Village(this, npcActions);
@@ -58,6 +65,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             if (reportDays < 1) throw new IOException("Invalid land settings");
             lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L);
             npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
+            npcActions.put("building", player -> shop.open(player, Shop.Kind.BUILD));
             npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
             npcActions.put("dex", dexMenu::open);
             npcActions.put("land", lands::open);
@@ -72,6 +80,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             customCrops = new CustomCrops(this, catalog, village, lands, cropLimit);
             getServer().getPluginManager().registerEvents(customCrops, this);
             village.onShowcase(customCrops::plantShowcase);
+            lamps = new Lamps(this, store, loadLamp());
+            getServer().getPluginManager().registerEvents(lamps, this);
             try {
                 resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
                 getServer().getPluginManager().registerEvents(resourcePack, this);
@@ -79,9 +89,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 // The pack is optional: without it every player gets the plain shop screens.
                 getLogger().log(Level.WARNING, "Resource pack is not being served", e);
             }
-            nextMarketChange = System.currentTimeMillis() + marketInterval;
-            long ticks = marketInterval / 50;
-            getServer().getScheduler().runTaskTimer(this, this::refreshPrices, ticks, ticks);
+            long now = System.currentTimeMillis();
+            if (nextMarketChange <= 0 || nextMarketChange > now + marketInterval) nextMarketChange = now + marketInterval;
+            saveMarket();
+            getServer().getScheduler().runTaskTimer(this, () -> {
+                if (System.currentTimeMillis() >= nextMarketChange) refreshPrices();
+            }, 20L, 20L);
             getServer().getScheduler().runTaskTimer(this, () -> village.lookAtPlayers(), 20L, 10L);
             getServer().getScheduler().runTask(this, () -> {
                 customCrops.start();
@@ -94,6 +107,20 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().disablePlugin(this);
         }
     }
+    /** Merged defaults only ever add keys, so an existing config keeps listing items the shop no longer sells. */
+    private void retireOldSettings() {
+        boolean changed = false;
+        for (String id : RETIRED_SEEDS) {
+            if (!getConfig().isSet("seeds." + id)) continue;
+            getConfig().set("seeds." + id, null);
+            changed = true;
+        }
+        if ("농기구".equals(getConfig().getString("seeds.BONE_MEAL.category"))) {
+            getConfig().set("seeds.BONE_MEAL.category", "비료");
+            changed = true;
+        }
+        if (changed) saveConfig();
+    }
     @Override public void onDisable() { if (resourcePack != null) resourcePack.stop(); }
     private Market loadMarket() throws IOException {
         var section = getConfig().getConfigurationSection("crops");
@@ -105,7 +132,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             rules.put(id, new Market.Rule(section.getLong(id + ".base", -1), section.getInt(id + ".swing", -1)));
         }
         for (Catalog.Crop crop : catalog.crops()) rules.put(crop.id(), new Market.Rule(crop.base(), crop.swing()));
-        return new Market(rules, getConfig().getInt("market.min-percent"), getConfig().getInt("market.max-percent"));
+        return new Market(rules, getConfig().getInt("market.min-percent"), getConfig().getInt("market.max-percent"), getConfig().getLong("market.volume-threshold", 256),
+            getConfig().getInt("market.pressure-per-batch", 10), getConfig().getInt("market.max-pressure", 60));
     }
     private Map<String, String> loadCrops() {
         var section = Objects.requireNonNull(getConfig().getConfigurationSection("crops"));
@@ -113,6 +141,21 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         for (String id : section.getKeys(false)) crops.put(id, section.getString(id + ".category", "기타"));
         for (Catalog.Crop crop : catalog.crops()) crops.put(crop.id(), CUSTOM_CATEGORY);
         return crops;
+    }
+    private LifeLamp loadLamp() throws IOException {
+        var section = getConfig().getConfigurationSection("lamp");
+        if (section == null) throw new IOException("Missing lamp");
+        Map<LifeLamp.Kind, LifeLamp.Range> ranges = new EnumMap<>(LifeLamp.Kind.class);
+        for (String kind : section.getKeys(false)) {
+            ranges.put(LifeLamp.Kind.valueOf(kind), new LifeLamp.Range(section.getInt(kind + ".min-percent"), section.getInt(kind + ".max-percent"), section.getInt(kind + ".min-amount"), section.getInt(kind + ".max-amount")));
+        }
+        return new LifeLamp(ranges);
+    }
+    /** The title for a menu: the shared dark panel for players with the pack, plain text otherwise. */
+    Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
+    void frame(org.bukkit.inventory.Inventory inventory, Player player) {
+        if (shop.drawn(player)) inventory.clear();
+        else Ui.frame(inventory);
     }
     private Dex loadDex() throws IOException {
         var pageSection = getConfig().getConfigurationSection("dex.pages");
@@ -127,7 +170,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         if (pages.isEmpty()) throw new IOException("Empty dex");
         Map<Integer, Dex.Reward> rewards = new HashMap<>();
         for (String tier : rewardSection.getKeys(false)) {
-            rewards.put(Integer.parseInt(tier), new Dex.Reward(rewardSection.getLong(tier + ".coins"), rewardSection.getLong(tier + ".zcoin"), rewardSection.getBoolean(tier + ".land-permit")));
+            rewards.put(Integer.parseInt(tier), new Dex.Reward(rewardSection.getLong(tier + ".coins"), rewardSection.getLong(tier + ".zcoin"), rewardSection.getBoolean(tier + ".land-permit"), rewardSection.getLong(tier + ".lamp")));
         }
         return new Dex(pages, rewards);
     }
@@ -149,16 +192,32 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         return seeds;
     }
+    private Map<String, Shop.Listing> loadBuilding() throws IOException {
+        var section = getConfig().getConfigurationSection("building-shop");
+        if (section == null) throw new IOException("Missing building-shop");
+        Map<String, Shop.Listing> result = new LinkedHashMap<>();
+        for (String id : section.getKeys(false)) {
+            Material material = Material.matchMaterial(id);
+            long price = section.getLong(id + ".price", -1);
+            if (material == null || !material.isItem() || !material.isBlock() || price < 1 || price > 1_000_000)
+                throw new IOException("Invalid building material: " + id);
+            if (market.has(id) && price <= market.ceiling(id)) throw new IOException("Building price below market ceiling: " + id);
+            result.put(id, new Shop.Listing(price, section.getString(id + ".category", "장식")));
+        }
+        return result;
+    }
     private File marketFile() { return new File(getDataFolder(), "market.yml"); }
     private void restoreMarket() throws IOException {
         if (!marketFile().exists()) return;
         var yaml = new YamlConfiguration();
         try { yaml.load(marketFile()); }
         catch (InvalidConfigurationException e) { throw new IOException("Invalid market.yml", e); }
+        nextMarketChange = yaml.getLong("next-change", 0);
         for (String id : market.ids()) {
             if (!yaml.isInt(id + ".percent")) continue;
             market.restore(id, yaml.getInt(id + ".percent"), yaml.getInt(id + ".previous", yaml.getInt(id + ".percent")));
             market.restoreTrail(id, yaml.getIntegerList(id + ".trail"));
+            market.restoreSupply(id, yaml.getLong(id + ".sold", 0), yaml.getInt(id + ".pressure", 0));
         }
     }
     private void saveMarket() throws IOException {
@@ -167,8 +226,21 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             yaml.set(id + ".percent", market.percent(id));
             yaml.set(id + ".previous", market.previousPercent(id));
             yaml.set(id + ".trail", market.trail(id));
+            yaml.set(id + ".sold", market.sold(id));
+            yaml.set(id + ".pressure", market.lastPressure(id));
         }
-        yaml.save(marketFile());
+        yaml.set("next-change", nextMarketChange);
+        var destination = marketFile().toPath();
+        var temp = java.nio.file.Files.createTempFile(destination.getParent(), "market-", ".tmp");
+        try {
+            java.nio.file.Files.writeString(temp, yaml.saveToString());
+            try { java.nio.file.Files.move(temp, destination, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            catch (java.nio.file.AtomicMoveNotSupportedException e) { java.nio.file.Files.move(temp, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        } finally { java.nio.file.Files.deleteIfExists(temp); }
+    }
+    void recordMarketSales(Map<String, Long> counts) throws IOException {
+        market.recordSales(counts);
+        saveMarket();
     }
     long secondsToNextMarket() { return Math.max(0, (nextMarketChange - System.currentTimeMillis()) / 1000); }
     private void refreshPrices() {
@@ -195,11 +267,16 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             switch (action) {
                 case "info" -> {
                     Profile profile = store.load(player.getUniqueId());
-                    tell(player, "보유 YD: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개");
+                    tell(player, "보유 YD: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개 · 생활 램프: " + profile.lamps() + "개");
                 }
                 case "price" -> prices(player);
+                case "buildshop", "seedshop", "cropshop" -> {
+                    if (!player.hasPermission("maitycoon.admin")) tell(player, "상점은 광장의 상인을 우클릭해 이용해 주세요.");
+                    else shop.open(player, action.equals("buildshop") ? Shop.Kind.BUILD : action.equals("seedshop") ? Shop.Kind.BUY : Shop.Kind.SELL);
+                }
                 case "starter" -> starter(player);
                 case "dex" -> dexMenu.open(player);
+                case "lamp" -> lamps.open(player);
                 case "land" -> {
                     if (args.length >= 2 && args[1].equalsIgnoreCase("member")) lands.memberCommand(player, args);
                     else lands.open(player);
@@ -210,10 +287,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 }
                 default -> {
                     tell(player, "광장의 작물 상인에게 작물을 팔고, 씨앗 상인에게 씨앗과 도구를 살 수 있습니다.");
+                    if (player.hasPermission("maitycoon.admin")) tell(player, "/tycoon buildshop | seedshop | cropshop — 관리자 상점 열기");
                     tell(player, "/tycoon starter — 시작 보급품 받기 (1회)");
                     tell(player, "/tycoon price — 현재 작물 시세 보기");
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
+                    tell(player, "/tycoon lamp — 손에 든 괭이에 생활 램프 적용");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
                     tell(player, "/tycoon info — 보유 YD와 즈코인 확인");
@@ -230,9 +309,11 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         boolean buildNow = action.equals("village") && args.length == 3 && args[1].equalsIgnoreCase("build") && args[2].equalsIgnoreCase("confirm");
         boolean step = action.equals("market") && args.length == 2 && args[1].equalsIgnoreCase("next");
         boolean records = action.equals("journal");
-        if (!build && !buildNow && !step && !records) return false;
+        boolean giveLamp = action.equals("lamp") && args.length == 4 && args[1].equalsIgnoreCase("give");
+        if (!build && !buildNow && !step && !records && !giveLamp) return false;
         if (!sender.hasPermission("maitycoon.admin")) { sender.sendMessage("권한이 없습니다."); return true; }
         if (step) { refreshPrices(); sender.sendMessage("시세를 갱신했습니다."); }
+        else if (giveLamp) giveLamp(sender, args[2], args[3]);
         else if (build) sender.sendMessage("월드 스폰 주변 약 110칸 사방의 지형을 평탄화하고 마을을 짓습니다. 되돌릴 수 없으니 월드를 백업한 뒤 /tycoon village build confirm 을 입력하세요.");
         else if (buildNow) {
             sender.sendMessage("마을을 짓습니다.");
@@ -240,6 +321,20 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         else journal(sender, args);
         return true;
+    }
+    private void giveLamp(CommandSender sender, String name, String amount) {
+        var target = getServer().getOfflinePlayerIfCached(name);
+        if (target == null) { sender.sendMessage("서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다."); return; }
+        try {
+            long count = Long.parseLong(amount);
+            if (count < 1) throw new NumberFormatException();
+            store.save(target.getUniqueId(), store.load(target.getUniqueId()).addLamps(count));
+            sender.sendMessage(name + "에게 생활 램프 " + count + "개를 지급했습니다.");
+        } catch (NumberFormatException e) { sender.sendMessage("개수를 확인해 주세요."); }
+        catch (IOException e) {
+            getLogger().log(Level.SEVERE, "Cannot give lamp", e);
+            sender.sendMessage("지급하지 못했습니다.");
+        }
     }
     private void journal(CommandSender sender, String[] args) {
         if (args.length == 3 && args[1].equalsIgnoreCase("resolve")) {
@@ -264,10 +359,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
      */
     void transact(Player player, String type, String detail, Action action) throws IOException {
         String id = journal.begin(player.getUniqueId(), type, detail);
-        try {
-            action.run();
-            player.saveData();
-        } finally { journal.finish(id); }
+        action.run();
+        player.saveData();
+        journal.finish(id);
     }
     private void prices(Player player) {
         tell(player, "현재 시세 (다음 변동까지 약 " + secondsToNextMarket() + "초)");

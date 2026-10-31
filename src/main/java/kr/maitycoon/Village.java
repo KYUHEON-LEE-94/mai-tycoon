@@ -31,6 +31,7 @@ final class Village implements Listener {
     private static final List<Npc> NPCS = List.of(
         new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, 0f, "작물 상인", "kai"),
         new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, 0f, "씨앗 상인", "makena"),
+        new Npc("building", -9, 7, -90f, "건축 자재 상인", "steve"),
         new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", "efe"),
         new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", "zuri"));
     private record Sign(int dx, double dy, double dz, String text) {}
@@ -182,6 +183,7 @@ final class Village implements Listener {
             }
             world.spawn(at, TextDisplay.class, display -> {
                 display.text(Component.text(sign.text(), NamedTextColor.GOLD));
+                display.setBillboard(org.bukkit.entity.Display.Billboard.VERTICAL);
                 display.setBackgroundColor(Color.fromARGB(190, 40, 28, 18));
                 display.setTransformation(new org.bukkit.util.Transformation(new org.joml.Vector3f(), new org.joml.AxisAngle4f(), new org.joml.Vector3f(2.4f, 2.4f, 2.4f), new org.joml.AxisAngle4f()));
                 display.setPersistent(true);

@@ -3,7 +3,7 @@ package kr.maitycoon;
 import java.util.*;
 import java.util.random.RandomGenerator;
 
-/** Bounded random walk per item: swings by up to `swing` percent per step and drifts back toward 100%. */
+/** Independent uniform prices each round, with per-crop server-wide oversupply pressure. */
 public final class Market {
     public record Rule(long base, int swing) {
         public Rule {
@@ -15,10 +15,22 @@ public final class Market {
     private final Map<String, Rule> rules;
     private final int minPercent, maxPercent;
     private long revision;
+    private final long volumeThreshold;
+    private final int pressurePerBatch, maxPressure;
+    private final Map<String, Long> sold = new HashMap<>();
+    private final Map<String, Integer> lastPressure = new HashMap<>();
     private static final int TRAIL = 8;
     private final Map<String, Integer> percent = new HashMap<>(), previous = new HashMap<>();
     private final Map<String, List<Integer>> trail = new HashMap<>();
     public Market(Map<String, Rule> rules, int minPercent, int maxPercent) {
+        this(rules, minPercent, maxPercent, 256, 10, 60);
+    }
+    public Market(Map<String, Rule> rules, int minPercent, int maxPercent, long volumeThreshold, int pressurePerBatch, int maxPressure) {
+        if (volumeThreshold < 1 || pressurePerBatch < 1 || maxPressure < pressurePerBatch || maxPressure > 90)
+            throw new IllegalArgumentException("Invalid supply pressure settings");
+        this.volumeThreshold = volumeThreshold;
+        this.pressurePerBatch = pressurePerBatch;
+        this.maxPressure = maxPressure;
         if (minPercent < 1 || minPercent > 100 || maxPercent < 100 || maxPercent > 1000) throw new IllegalArgumentException("Invalid market bounds");
         this.rules = Collections.unmodifiableMap(new LinkedHashMap<>(rules));
         this.minPercent = minPercent;
@@ -54,15 +66,43 @@ public final class Market {
         for (int value : values.subList(Math.max(0, values.size() - TRAIL), values.size())) restored.add(clamp(value));
         trail.put(id, restored);
     }
+    public long sold(String id) { return sold.getOrDefault(id, 0L); }
+    public int lastPressure(String id) { return lastPressure.getOrDefault(id, 0); }
+    public int pendingPressure(String id) {
+        long batches = sold(id) / volumeThreshold;
+        return (int) Math.min(maxPressure, Math.min(batches, maxPressure) * pressurePerBatch);
+    }
+    public void recordSales(Map<String, Long> counts) {
+        for (var entry : counts.entrySet()) {
+            if (!has(entry.getKey()) || entry.getValue() == null || entry.getValue() < 0)
+                throw new IllegalArgumentException("Invalid sale volume");
+        }
+        counts.forEach((id, count) -> sold.put(id, count > Long.MAX_VALUE - sold(id) ? Long.MAX_VALUE : sold(id) + count));
+    }
+    public void restoreSupply(String id, long count, int pressure) {
+        if (!has(id)) return;
+        sold.put(id, Math.max(0, count));
+        lastPressure.put(id, Math.max(0, Math.min(maxPressure, pressure)));
+    }
     public List<Move> step(RandomGenerator random) {
         List<Move> moves = new ArrayList<>();
         revision++;
         for (var entry : rules.entrySet()) {
             String id = entry.getKey();
-            int swing = entry.getValue().swing(), current = percent.get(id);
-            int pull = (100 - current) / 8;
+            int current = percent.get(id), pressure = pendingPressure(id);
+            long oldPrice = price(id);
+            // The full range is sampled afresh, independent of the previous price.
+            int next = random.nextInt(minPercent, maxPercent + 1);
+            if (pressure > 0) {
+                next = clamp(next * (100 - pressure) / 100);
+                // Heavy sales must actually lower the next YD price, unless already at the floor.
+                long target = Math.max(floor(id), oldPrice - Math.max(1, Math.round(oldPrice * pressure / 100.0)));
+                while (next > minPercent && priceAt(id, next) > target) next--;
+            }
             previous.put(id, current);
-            percent.put(id, clamp(current + pull + random.nextInt(-swing, swing + 1)));
+            percent.put(id, next);
+            lastPressure.put(id, pressure);
+            sold.put(id, 0L);
             List<Integer> recent = trail.get(id);
             recent.add(percent.get(id));
             if (recent.size() > TRAIL) recent.remove(0);

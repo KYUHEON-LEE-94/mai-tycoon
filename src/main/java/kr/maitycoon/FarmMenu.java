@@ -31,13 +31,13 @@ final class FarmMenu implements Listener {
     }
     void open(Player player) {
         Holder holder = new Holder();
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, Component.text("농장 관리"));
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "농장 관리"));
         render(holder, player);
         player.openInventory(holder.inventory);
     }
     private void render(Holder holder, Player player) {
         Inventory inventory = holder.inventory;
-        Ui.frame(inventory);
+        plugin.frame(inventory, player);
         holder.footprints.clear();
         List<FootprintLog.Footprint> open = lands.reportable(player);
         for (int i = 0; i < open.size() && i < BODY_SIZE; i++) {
