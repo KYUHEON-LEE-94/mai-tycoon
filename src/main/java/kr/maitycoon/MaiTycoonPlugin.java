@@ -29,6 +29,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private CustomCrops customCrops;
     private Lamps lamps;
     private MiniMap miniMap;
+    private HelpMenu helpMenu;
     private Tractors tractors;
     private AutoPlanting autoPlanting;
     private TransactionJournal journal;
@@ -72,12 +73,18 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             if (reportDays < 1) throw new IOException("Invalid land settings");
             lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L);
             npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
+            npcActions.put("guide", player -> helpMenu.open(player));
             npcActions.put("building", player -> shop.open(player, Shop.Kind.BUILD));
             npcActions.put("furniture", player -> shop.open(player, Shop.Kind.FURNITURE));
             npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
             npcActions.put("dex", dexMenu::open);
             npcActions.put("land", lands::open);
             Objects.requireNonNull(getCommand("tycoon")).setExecutor(this);
+            Objects.requireNonNull(getCommand("도움말")).setExecutor((sender, command, label, args) -> {
+                if (sender instanceof Player player) helpMenu.open(player);
+                else sender.sendMessage("게임 안에서 사용하세요.");
+                return true;
+            });
             Objects.requireNonNull(getCommand("tycoon")).setTabCompleter(this);
             getServer().getPluginManager().registerEvents(shop, this);
             getServer().getPluginManager().registerEvents(village, this);
@@ -90,6 +97,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             village.onShowcase(customCrops::plantShowcase);
             lamps = new Lamps(this, store, loadLamp());
             getServer().getPluginManager().registerEvents(lamps, this);
+            helpMenu = new HelpMenu(this);
+            getServer().getPluginManager().registerEvents(helpMenu, this);
             miniMap = new MiniMap(this);
             getServer().getPluginManager().registerEvents(miniMap, this);
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
@@ -120,6 +129,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getScheduler().runTaskTimer(this, () -> village.lookAtPlayers(), 20L, 10L);
             getServer().getScheduler().runTaskTimer(this, () -> lands.refreshBanners(), 40L, 20L);
             getServer().getScheduler().runTaskTimer(this, () -> miniMap.refresh(), 40L, 20L);
+            getServer().getScheduler().runTaskTimer(this, () -> dexMenu.checkBiomes(), 60L, 40L);
             getServer().getScheduler().runTask(this, () -> {
                 customCrops.start();
                 if (village.built()) { getServer().setSpawnRadius(0); village.upgradeStructures(); village.ensureNpcs(); }
@@ -322,6 +332,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 }
                 case "starter" -> starter(player);
                 case "dex" -> dexMenu.open(player);
+                case "help" -> helpMenu.open(player);
                 case "lamp" -> lamps.open(player);
                 case "autoplant" -> autoPlanting.open(player);
                 case "land" -> {

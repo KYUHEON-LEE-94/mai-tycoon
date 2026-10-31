@@ -22,7 +22,8 @@ final class DexMenu implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int INFO = 0, FIRST_TAB = 1, BODY_START = 9, BODY_SIZE = 36, PREV = 45, PROGRESS = 49, NEXT = 53;
+    private static final int INFO = 0, BODY_START = 9, BODY_SIZE = 36, PREV = 45, PROGRESS = 49, NEXT = 53;
+    private static final int[] TAB_SLOTS = {1, 2, 3, 4, 5, 6, 7, 8, 46, 47, 48, 50, 51, 52};
     private final MaiTycoonPlugin plugin;
     private final Dex dex;
     private final ProfileStore store;
@@ -46,13 +47,16 @@ final class DexMenu implements Listener {
         plugin.frame(inventory, player);
         holder.tabs.clear();
         holder.entries.clear();
-        int slot = FIRST_TAB;
+        int tabIndex = 0;
         for (var page : dex.pages().entrySet()) {
+            if (tabIndex == TAB_SLOTS.length) throw new IllegalStateException("Too many dex pages");
+            if (page.getValue().isEmpty()) continue;
+            int slot = TAB_SLOTS[tabIndex++];
             long done = page.getValue().stream().filter(profile.dex()::contains).count();
-            ItemStack tab = Ui.decorate(catalog.item(page.getValue().get(0), 1), Ui.line(page.getKey(), NamedTextColor.WHITE),
+            ItemStack tab = Ui.decorate(base(page.getValue().get(0)), Ui.line(page.getKey(), NamedTextColor.WHITE),
                 List.of(Ui.line(done + " / " + page.getValue().size(), NamedTextColor.GRAY)));
             holder.tabs.put(slot, page.getKey());
-            inventory.setItem(slot++, page.getKey().equals(holder.page) ? Ui.glow(tab) : tab);
+            inventory.setItem(slot, page.getKey().equals(holder.page) ? Ui.glow(tab) : tab);
         }
         List<String> entries = dex.pages().get(holder.page);
         int pages = Math.max(1, (entries.size() + BODY_SIZE - 1) / BODY_SIZE);
@@ -68,9 +72,12 @@ final class DexMenu implements Listener {
         if (holder.subpage > 0) inventory.setItem(PREV, Ui.icon(Material.ARROW, Ui.line("이전 페이지", NamedTextColor.WHITE), List.of()));
         if (holder.subpage < pages - 1) inventory.setItem(NEXT, Ui.icon(Material.ARROW, Ui.line("다음 페이지 " + (holder.subpage + 2) + "/" + pages, NamedTextColor.WHITE), List.of()));
     }
-    private Component title(String id, NamedTextColor color) { return catalog.name(id).color(color).decoration(TextDecoration.ITALIC, false); }
+    private static boolean found(String id) { return id.startsWith(DexItems.MOB) || id.startsWith(DexItems.BIOME); }
+    private ItemStack base(String id) { return found(id) ? new ItemStack(DexItems.icon(id)) : catalog.item(id, 1); }
+    private Component title(String id, NamedTextColor color) { return (found(id) ? DexItems.name(id) : catalog.name(id)).color(color).decoration(TextDecoration.ITALIC, false); }
     private ItemStack entry(String id, Profile profile, Player player) {
-        if (profile.dex().contains(id)) return Ui.glow(Ui.decorate(catalog.item(id, 1), title(id, NamedTextColor.GREEN), List.of(Ui.line("등록 완료", NamedTextColor.GREEN))));
+        if (profile.dex().contains(id)) return Ui.glow(Ui.decorate(base(id), title(id, NamedTextColor.GREEN), List.of(Ui.line("등록 완료", NamedTextColor.GREEN))));
+        if (found(id)) return Ui.icon(Material.GRAY_DYE, title(id, NamedTextColor.DARK_GRAY), List.of(Ui.line(id.startsWith(DexItems.MOB) ? "처치하면 등록됩니다." : "방문하면 등록됩니다.", NamedTextColor.GRAY)));
         long owned = catalog.count(player, id);
         return owned > 0
             ? Ui.decorate(catalog.item(id, 1), title(id, NamedTextColor.YELLOW), List.of(Ui.line("보유 " + owned + "개", NamedTextColor.GRAY), Ui.line("클릭하면 1개를 제출해 등록합니다. 제출한 아이템은 사라집니다.", NamedTextColor.GREEN)))
@@ -85,6 +92,40 @@ final class DexMenu implements Listener {
         }
         return Ui.icon(Material.WRITABLE_BOOK, Ui.line("도감 " + profile.dex().size() + " / " + dex.total(), NamedTextColor.YELLOW), lore);
     }
+    /** Registers a kill or a visit; nothing is handed in, and it works in any game mode. */
+    void discover(Player player, String id) {
+        if (!dex.has(id)) return;
+        plugin.guarded(player, () -> {
+            var uuid = player.getUniqueId();
+            Profile before = store.load(uuid);
+            if (before.dex().contains(id)) return;
+            Profile after = dex.register(before, id);
+            store.save(uuid, after);
+            plugin.tell(player, Component.text("도감 등록: ").append(DexItems.name(id)).append(Component.text(" (" + after.dex().size() + "/" + dex.total() + ")")));
+            announce(player, before, after);
+        });
+    }
+    private void announce(Player player, Profile before, Profile after) {
+        for (int tier : after.dexRewards()) {
+            if (before.dexRewards().contains(tier)) continue;
+            plugin.tell(player, "도감 " + tier + "개 달성! " + dex.rewards().get(tier).describe());
+        }
+    }
+    private final Map<UUID, String> lastBiome = new HashMap<>();
+    void checkBiomes() {
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            String biome = player.getLocation().getBlock().getBiome().getKey().getKey();
+            if (biome.equals(lastBiome.put(player.getUniqueId(), biome))) continue;
+            discover(player, DexItems.BIOME + biome);
+        }
+    }
+    @EventHandler
+    public void onKill(org.bukkit.event.entity.EntityDeathEvent event) {
+        Player killer = event.getEntity().getKiller();
+        if (killer != null) discover(killer, DexItems.MOB + event.getEntityType().name());
+    }
+    @EventHandler
+    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) { lastBiome.remove(event.getPlayer().getUniqueId()); }
     private int slotOf(Player player, String id) {
         ItemStack[] contents = player.getInventory().getStorageContents();
         for (int slot = 0; slot < contents.length; slot++) if (id.equals(catalog.idOf(contents[slot]))) return slot;
@@ -103,10 +144,7 @@ final class DexMenu implements Listener {
             Ui.take(player, slot, 1);
         });
         plugin.tell(player, Component.text("도감 등록: ").append(catalog.name(id)).append(Component.text(" (" + after.dex().size() + "/" + dex.total() + ")")));
-        for (int tier : after.dexRewards()) {
-            if (before.dexRewards().contains(tier)) continue;
-            plugin.tell(player, "도감 " + tier + "개 달성! " + dex.rewards().get(tier).describe());
-        }
+        announce(player, before, after);
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
@@ -119,7 +157,7 @@ final class DexMenu implements Listener {
             if (tab != null) { holder.page = tab; holder.subpage = 0; }
             else if (raw == PREV) holder.subpage = Math.max(0, holder.subpage - 1);
             else if (raw == NEXT) holder.subpage++;
-            else if (entry != null) register(player, entry, slotOf(player, entry));
+            else if (entry != null) { if (found(entry)) return; register(player, entry, slotOf(player, entry)); }
             else if (raw >= Ui.SIZE) register(player, catalog.idOf(event.getCurrentItem()), event.getSlot());
             else return;
             render(holder, player);
