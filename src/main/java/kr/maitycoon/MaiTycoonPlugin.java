@@ -24,13 +24,19 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private Village village;
     private DexMenu dexMenu;
     private Lands lands;
+    private ResourcePack resourcePack;
+    private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
     private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land");
-    private static final List<String> ADMIN_ACTIONS = List.of("market");
+    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal");
     @Override public void onEnable() {
         saveDefaultConfig();
         try {
             store = new ProfileStore(getDataFolder().toPath().resolve("players"));
+            journal = new TransactionJournal(getDataFolder().toPath().resolve("journal"));
+            for (var entry : journal.interrupted()) {
+                getLogger().warning("Interrupted trade " + entry.id() + " for " + entry.player() + " at " + entry.createdAt() + ": " + entry.type() + " " + entry.detail());
+            }
             market = loadMarket();
             restoreMarket();
             Map<Material, String> crops = loadCrops();
@@ -55,18 +61,22 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(village, this);
             getServer().getPluginManager().registerEvents(dexMenu, this);
             getServer().getPluginManager().registerEvents(lands, this);
+            resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
+            getServer().getPluginManager().registerEvents(resourcePack, this);
             nextMarketChange = System.currentTimeMillis() + marketInterval;
             long ticks = marketInterval / 50;
             getServer().getScheduler().runTaskTimer(this, this::refreshPrices, ticks, ticks);
             getServer().getScheduler().runTask(this, () -> {
                 if (village.built()) { getServer().setSpawnRadius(0); village.ensureNpcs(); }
                 else if (getConfig().getBoolean("village.auto-build")) village.build(() -> {});
+                else getLogger().info("No village yet. /tycoon village build confirm flattens the area around the world spawn and builds it.");
             });
         } catch (IOException | IllegalArgumentException e) {
             getLogger().log(Level.SEVERE, "Cannot enable MaiTycoon", e);
             getServer().getPluginManager().disablePlugin(this);
         }
     }
+    @Override public void onDisable() { if (resourcePack != null) resourcePack.stop(); }
     private Market loadMarket() throws IOException {
         var section = getConfig().getConfigurationSection("crops");
         if (section == null) throw new IOException("Missing crops");
@@ -170,7 +180,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 }
                 default -> {
                     tell(player, "광장의 작물 상인에게 작물을 팔고, 씨앗 상인에게 씨앗과 도구를 살 수 있습니다.");
-                    tell(player, "/tycoon starter — 테스트용 최초 1회 보급품 받기");
+                    tell(player, "/tycoon starter — 시작 보급품 받기 (1회)");
                     tell(player, "/tycoon price — 현재 작물 시세 보기");
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도와 청크 구매");
@@ -186,15 +196,47 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     }
     private boolean admin(CommandSender sender, String action, String[] args) {
         boolean build = action.equals("village") && args.length == 2 && args[1].equalsIgnoreCase("build");
+        boolean buildNow = action.equals("village") && args.length == 3 && args[1].equalsIgnoreCase("build") && args[2].equalsIgnoreCase("confirm");
         boolean step = action.equals("market") && args.length == 2 && args[1].equalsIgnoreCase("next");
-        if (!build && !step) return false;
+        boolean records = action.equals("journal");
+        if (!build && !buildNow && !step && !records) return false;
         if (!sender.hasPermission("maitycoon.admin")) { sender.sendMessage("권한이 없습니다."); return true; }
         if (step) { refreshPrices(); sender.sendMessage("시세를 갱신했습니다."); }
-        else {
-            sender.sendMessage("마을을 짓습니다. 스폰 주변 지형이 바뀝니다.");
+        else if (build) sender.sendMessage("월드 스폰 주변 약 110칸 사방의 지형을 평탄화하고 마을을 짓습니다. 되돌릴 수 없으니 월드를 백업한 뒤 /tycoon village build confirm 을 입력하세요.");
+        else if (buildNow) {
+            sender.sendMessage("마을을 짓습니다.");
             village.build(() -> sender.sendMessage("마을 작업이 끝났습니다."));
         }
+        else journal(sender, args);
         return true;
+    }
+    private void journal(CommandSender sender, String[] args) {
+        if (args.length == 3 && args[1].equalsIgnoreCase("resolve")) {
+            try { sender.sendMessage(journal.resolve(args[2]) ? "거래 기록을 처리했습니다. 해당 플레이어의 거래가 다시 가능합니다." : "그런 기록이 없습니다."); }
+            catch (IOException e) {
+                getLogger().log(Level.SEVERE, "Cannot resolve journal entry " + args[2], e);
+                sender.sendMessage("기록을 처리하지 못했습니다.");
+            }
+            return;
+        }
+        if (journal.interrupted().isEmpty()) { sender.sendMessage("중단된 거래가 없습니다."); return; }
+        for (var entry : journal.interrupted()) {
+            String name = getServer().getOfflinePlayer(entry.player()).getName();
+            sender.sendMessage(entry.id() + " · " + (name == null ? entry.player() : name) + " · " + entry.createdAt() + " · " + entry.type() + " " + entry.detail());
+        }
+        sender.sendMessage("잔액과 아이템을 확인해 바로잡은 뒤 /tycoon journal resolve <번호> 를 입력하세요.");
+    }
+    boolean tradeHeld(Player player) { return journal.held(player.getUniqueId()); }
+    /**
+     * Runs a trade under a durable journal entry and saves the inventory before closing it, since the server would
+     * otherwise write it much later. The entry survives only if the server dies inside the trade.
+     */
+    void transact(Player player, String type, String detail, Action action) throws IOException {
+        String id = journal.begin(player.getUniqueId(), type, detail);
+        try {
+            action.run();
+            player.saveData();
+        } finally { journal.finish(id); }
     }
     private void prices(Player player) {
         tell(player, "현재 시세 (다음 변동까지 약 " + secondsToNextMarket() + "초)");
@@ -217,7 +259,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         if (empty < 3) { tell(player, "인벤토리에 빈칸 3개가 필요합니다."); return; }
         store.save(player.getUniqueId(), profile.claimStarter());
         player.getInventory().addItem(new ItemStack(Material.STONE_HOE), new ItemStack(Material.WHEAT_SEEDS, 16), new ItemStack(Material.BREAD, 8));
-        tell(player, "돌 괭이, 밀 씨앗 16개, 빵 8개를 받았습니다! 마을 공용 농장에서 농사를 시작하세요.");
+        tell(player, "돌 괭이, 밀 씨앗 16개, 빵 8개를 받았습니다. 마을 공용 농장에서 농사를 시작하세요.");
     }
     interface Action { void run() throws IOException; }
     void guarded(Player player, Action action) {
@@ -234,7 +276,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         String typed = args[args.length - 1].toLowerCase(Locale.ROOT);
         if (args.length == 2 && sender.hasPermission("maitycoon.admin")) {
-            String next = args[0].equalsIgnoreCase("village") ? "build" : args[0].equalsIgnoreCase("market") ? "next" : "";
+            String next = args[0].equalsIgnoreCase("village") ? "build" : args[0].equalsIgnoreCase("market") ? "next" : args[0].equalsIgnoreCase("journal") ? "resolve" : "";
             return !next.isEmpty() && next.startsWith(typed) ? List.of(next) : List.of();
         }
         if (args.length != 1) return List.of();

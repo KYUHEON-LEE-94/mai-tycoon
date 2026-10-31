@@ -14,6 +14,7 @@ public final class Market {
     public record Move(String id, long price, long change) {}
     private final Map<String, Rule> rules;
     private final int minPercent, maxPercent;
+    private long revision;
     private static final int TRAIL = 8;
     private final Map<String, Integer> percent = new HashMap<>(), previous = new HashMap<>();
     private final Map<String, List<Integer>> trail = new HashMap<>();
@@ -36,6 +37,8 @@ public final class Market {
     /** Recent percents, oldest first, for the price graph. */
     public List<Integer> trail(String id) { return List.copyOf(trail.get(id)); }
     public int minPercent() { return minPercent; }
+    /** Changes on every price step, so a quote can tell it is out of date. */
+    public long revision() { return revision; }
     public int maxPercent() { return maxPercent; }
     private long priceAt(String id, int atPercent) {
         return Math.max(1, Math.round(rules.get(id).base() * atPercent / 100.0));
@@ -53,6 +56,7 @@ public final class Market {
     }
     public List<Move> step(RandomGenerator random) {
         List<Move> moves = new ArrayList<>();
+        revision++;
         for (var entry : rules.entrySet()) {
             String id = entry.getKey();
             int swing = entry.getValue().swing(), current = percent.get(id);

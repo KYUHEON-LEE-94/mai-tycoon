@@ -65,7 +65,7 @@ final class DexMenu implements Listener {
         }
         long owned = Ui.count(player, item);
         return owned > 0
-            ? Ui.icon(item, Ui.name(item, NamedTextColor.YELLOW), List.of(Ui.line("보유 " + owned + "개", NamedTextColor.GRAY), Ui.line("클릭하면 1개를 제출해 등록합니다.", NamedTextColor.GREEN)))
+            ? Ui.icon(item, Ui.name(item, NamedTextColor.YELLOW), List.of(Ui.line("보유 " + owned + "개", NamedTextColor.GRAY), Ui.line("클릭하면 1개를 제출해 등록합니다. 제출한 아이템은 사라집니다.", NamedTextColor.GREEN)))
             : Ui.icon(Material.GRAY_DYE, Ui.name(item, NamedTextColor.DARK_GRAY), List.of(Ui.line("미등록", NamedTextColor.GRAY)));
     }
     private ItemStack progress(Profile profile) {
@@ -83,9 +83,12 @@ final class DexMenu implements Listener {
         var id = player.getUniqueId();
         Profile before = store.load(id);
         if (before.dex().contains(item.name())) { plugin.tell(player, "이미 등록된 항목입니다."); return; }
+        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
         Profile after = dex.register(before, item.name());
-        store.save(id, after);
-        Ui.take(player, slot, 1);
+        plugin.transact(player, "dex", item.name(), () -> {
+            store.save(id, after);
+            Ui.take(player, slot, 1);
+        });
         plugin.tell(player, Component.text("도감 등록: ").append(Component.translatable(item)).append(Component.text(" (" + after.dex().size() + "/" + dex.total() + ")")));
         for (int tier : after.dexRewards()) {
             if (before.dexRewards().contains(tier)) continue;

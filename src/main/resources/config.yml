@@ -68,7 +68,11 @@ land:
   price: 5000
   step: 2500
   max: 9
+# 상점 화면용 리소스팩을 내려받는 주소. 다른 사람이 접속하는 서버라면 host를 공인 주소로 바꾸고 포트를 여세요.
+pack:
+  host: 127.0.0.1
+  port: 25580
 village:
-  # 서버 첫 실행 때 월드 스폰 주변 약 110칸 사방을 평탄화해 마을을 짓습니다.
-  # 이미 쓰던 월드에 설치한다면 먼저 false로 바꾸고 /tycoon village build 로 원하는 때에 지으세요.
-  auto-build: true
+  # true면 서버 첫 실행 때 월드 스폰 주변 약 110칸 사방을 평탄화해 마을을 짓습니다.
+  # 기본값은 기존 월드를 보존하기 위해 false입니다. 마을은 /tycoon village build confirm 으로 짓습니다.
+  auto-build: false

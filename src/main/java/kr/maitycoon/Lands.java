@@ -114,6 +114,7 @@ final class Lands implements Listener {
     }
     private void buy(Player player, int cx, int cz) throws IOException {
         if (!plugin.survival(player)) return;
+        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
         World world = player.getWorld();
         var id = player.getUniqueId();
         Profile profile = store.load(id);
@@ -129,8 +130,10 @@ final class Lands implements Listener {
         if (profile.coins() < cost) { plugin.tell(player, "YD가 부족합니다. 필요 " + cost + " / 보유 " + profile.coins()); return; }
         registry.put(key, id);
         try {
-            save();
-            store.save(id, profile.spend(cost));
+            plugin.transact(player, "land", key + " -" + cost, () -> {
+                save();
+                store.save(id, profile.spend(cost));
+            });
         } catch (IOException e) {
             registry.remove(key);
             try { save(); } catch (IOException rollback) { plugin.getLogger().log(Level.SEVERE, "Cannot roll back land " + key, rollback); }

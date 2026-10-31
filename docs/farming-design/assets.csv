@@ -1,0 +1,15 @@
+id,asset,logical_size,priority,status,notes
+A01,shop_sell_background,176x128,P1,existing_generator_review,20개 상품 배치와 실제 클릭 통합
+A02,shop_buy_background,176x128,P1,existing_generator_review,판매 배경과 동일 좌표 계약
+A03,transaction_confirm,176x128,P1,spec_ready_not_drawn,금액과 확인 취소 구분
+A04,dex_background,176x128,P2,spec_ready_not_drawn,기존 도감 슬롯 먼저 확인
+A05,land_map_background,176x128,P1,spec_ready_not_drawn,5x5 지도와 상태 범례
+A06,lamp_background,176x128,P2,spec_ready_not_drawn,대상 현재옵션 소비량
+A07,category_icons,16x16_each,P1,use_vanilla_first,곡물 열매 특수 희귀 씨앗 농기구
+A08,numeric_glyphs,variable,P1,existing_generator_review,YD 큰금액 음수 화살표 한글 검증
+A09,land_state_icons,16x16_each,P1,spec_ready_not_drawn,내땅 타인 빈땅 마을 색과 패턴 병용
+A10,footprint_marker,world_display,P2,spec_ready_not_drawn,블록 충돌 없는 표시 및 개수 제한
+A11,replant_scroll,16x16,P2,spec_ready_not_drawn,잔여횟수는 서버값 텍스트
+A12,tractor_model,not_fixed,P3,blocked_on_reference,기능범위 검증 뒤 제작
+A13,korean_font,not_applicable,P1,use_vanilla_first,OS 설치폰트 의존 제거 라이선스 기록
+A14,market_signs,world_blocks,P1,spec_ready_not_drawn,매입과 판매 방향을 명확히
