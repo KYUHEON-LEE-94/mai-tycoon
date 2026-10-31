@@ -36,7 +36,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp", "autoplant");
     private static final String CUSTOM_CATEGORY = "특산물";
     private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
-    static final String BUY_PROMPT = "[웅크리기 두 번]";
+    static final String BUY_PROMPT = "[손 바꾸기]";
     private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
     private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop", "give");
     @Override public void onEnable() {
@@ -182,9 +182,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     /** The title for a menu: the shared dark panel for players with the pack, plain text otherwise. */
     /** Boss bar text is centred, so trailing space pushes it toward the left edge. Without the pack it stays centred. */
     Component bannerTitle(Player player, String text) {
-        // The keybind component shows each player's own sneak key; players rebind it, so a fixed key name would be wrong.
+        // The keybind component shows each player's own key (F unless rebound), so a fixed key name could be wrong.
         Component title = text.startsWith(BUY_PROMPT)
-            ? Component.text("[", NamedTextColor.GOLD).append(Component.keybind("key.sneak", NamedTextColor.GOLD)).append(Component.text(" 두 번]" + text.substring(BUY_PROMPT.length()), NamedTextColor.GOLD))
+            ? Component.text("[", NamedTextColor.GOLD).append(Component.keybind("key.swapOffhand", NamedTextColor.GOLD)).append(Component.text("]" + text.substring(BUY_PROMPT.length()), NamedTextColor.GOLD))
             : Component.text(text, NamedTextColor.GOLD);
         return shop.drawn(player) ? title.append(new ShopTitle().spaceRight(BANNER_SHIFT).build()) : title;
     }
@@ -338,7 +338,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     if (player.hasPermission("maitycoon.admin")) tell(player, "/tycoon buildshop | seedshop | cropshop — 관리자 상점 열기");
                     tell(player, "/tycoon starter — 시작 보급품 받기 (1회)");
                     tell(player, "/tycoon price — 현재 작물 시세 보기");
-                    player.sendMessage(Component.text("[마이 타이쿤] ", NamedTextColor.GREEN).append(Component.keybind("key.sneak", NamedTextColor.YELLOW)).append(Component.text(" 키를 빠르게 두 번 누르면 도감이 열립니다. 구매할 수 있는 땅에서는 구매 화면이 열립니다.", NamedTextColor.WHITE)));
+                    player.sendMessage(Component.text("[마이 타이쿤] ", NamedTextColor.GREEN).append(Component.keybind("key.swapOffhand", NamedTextColor.YELLOW)).append(Component.text(" 키를 누르면 도감이 열립니다. 구매할 수 있는 땅에서는 구매 화면이 열립니다. 손 바꾸기는 웅크린 채 누르세요.", NamedTextColor.WHITE)));
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
                     tell(player, "/tycoon lamp — 손에 든 괭이에 생활 램프 적용");

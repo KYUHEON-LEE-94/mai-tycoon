@@ -38,7 +38,6 @@ final class Lands implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final long DOUBLE_SNEAK_MILLIS = 400;
     private static final int COLUMNS = 9, ROWS = 5, INFO = 45, DEX = 45, AUTO_PLANT = 46, MINE = 47, LAMP = 48, PERMIT = 49, FARM = 51, SHOW = 53;
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
@@ -48,7 +47,6 @@ final class Lands implements Listener {
     private final Map<UUID, net.kyori.adventure.bossbar.BossBar> banners = new HashMap<>();
     private final Map<UUID, String> shown = new HashMap<>();
     private final Map<UUID, Long> linkSent = new HashMap<>();
-    private final Map<UUID, Long> lastSneak = new HashMap<>();
     private final FarmMenu farmMenu;
     private final File file, footprintFile;
     private final long price, step;
@@ -287,19 +285,9 @@ final class Lands implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onHotkey(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
-        if (!player.isSneaking()) return;
+        // Sneaking keeps the vanilla hand swap available for anyone who needs it.
+        if (player.isSneaking()) return;
         event.setCancelled(true);
-        hotkey(player);
-    }
-    /** Sneaking twice quickly is the same hotkey, and works even if a client never sends the swap key. */
-    @EventHandler(ignoreCancelled = true)
-    public void onSneak(PlayerToggleSneakEvent event) {
-        if (!event.isSneaking()) return;
-        Player player = event.getPlayer();
-        long now = System.currentTimeMillis();
-        Long last = lastSneak.put(player.getUniqueId(), now);
-        if (last == null || now - last > DOUBLE_SNEAK_MILLIS) return;
-        lastSneak.remove(player.getUniqueId());
         hotkey(player);
     }
     private void hotkey(Player player) {
