@@ -51,11 +51,15 @@ final class Village implements Listener {
     private final Map<String, Consumer<Player>> npcActions;
     private String worldName;
     private int x, y, z;
+    private final int reach;
+    private final boolean protectReserve;
     private boolean built, building;
     private int structures;
     private Consumer<List<Block>> showcase = soil -> {};
     /** npcActions is keyed by NPC id and may be filled after construction. */
-    Village(MaiTycoonPlugin plugin, Map<String, Consumer<Player>> npcActions) throws IOException {
+    Village(MaiTycoonPlugin plugin, Map<String, Consumer<Player>> npcActions, int reserve, boolean protectReserve) throws IOException {
+        this.reach = VillageBuilder.RADIUS + reserve;
+        this.protectReserve = protectReserve;
         this.plugin = plugin;
         this.npcActions = npcActions;
         this.file = new File(plugin.getDataFolder(), "village.yml");
@@ -74,10 +78,10 @@ final class Village implements Listener {
     boolean built() { return built; }
     void onShowcase(Consumer<List<Block>> planter) { showcase = planter; }
     World world() { return worldName == null ? null : plugin.getServer().getWorld(worldName); }
-    /** True when the chunk touches the town or its terrain slope. */
+    /** True when the chunk touches the town, its terrain slope or the land reserved for growing it. */
     boolean overlaps(World world, int chunkX, int chunkZ) {
         if (!built || !world.getName().equals(worldName)) return false;
-        int reach = VillageBuilder.RADIUS + VillageBuilder.BLEND;
+        int reach = Math.max(this.reach, VillageBuilder.RADIUS + VillageBuilder.BLEND);
         return (chunkX << 4) + 15 >= x - reach && (chunkX << 4) <= x + reach && (chunkZ << 4) + 15 >= z - reach && (chunkZ << 4) <= z + reach;
     }
     Location spawn() {
@@ -130,7 +134,7 @@ final class Village implements Listener {
         saveState();
         ensureNpcs();
         showcase.accept(new VillageBuilder(world, x, z, y).showcaseSoil());
-        for (Player player : world.getPlayers()) if (inside(player.getLocation())) player.teleport(spawn);
+        for (Player player : world.getPlayers()) if (town(player.getLocation())) player.teleport(spawn);
         plugin.getLogger().info("Village ready");
     }
     private void saveState() {
@@ -219,16 +223,18 @@ final class Village implements Listener {
         }
     }
     private boolean npc(Entity entity) { return entity.getPersistentDataContainer().has(npcKey, PersistentDataType.STRING); }
-    private boolean inside(Location at) {
-        return built && at.getWorld().getName().equals(worldName)
-            && Math.abs(at.getBlockX() - x) <= VillageBuilder.RADIUS && Math.abs(at.getBlockZ() - z) <= VillageBuilder.RADIUS;
+    private boolean within(Location at, int radius) {
+        return built && at.getWorld().getName().equals(worldName) && Math.abs(at.getBlockX() - x) <= radius && Math.abs(at.getBlockZ() - z) <= radius;
     }
+    /** The part actually built. Reserved ground is left to mobs, which the collection book needs. */
+    private boolean town(Location at) { return within(at, VillageBuilder.RADIUS); }
+    private boolean inside(Location at) { return within(at, protectReserve ? reach : VillageBuilder.RADIUS); }
     private boolean farm(Block block) {
         int dx = block.getX() - x, dz = block.getZ() - z;
         return VillageBuilder.FARMS.stream().anyMatch(zone -> zone.contains(dx, dz));
     }
     /** Inside the village only the shared farm plots replant. */
-    boolean mayReplant(Block block) { return !inside(block.getLocation()) || farm(block); }
+    boolean mayReplant(Block block) { return !town(block.getLocation()) || farm(block); }
     boolean allowsPlanting(Player player, Block block) {
         if (!guarded(player, block) || farm(block)) return true;
         refuse(player);
@@ -297,6 +303,6 @@ final class Village implements Listener {
     public void onIgnite(BlockIgniteEvent event) { if (inside(event.getBlock().getLocation())) event.setCancelled(true); }
     @EventHandler(ignoreCancelled = true)
     public void onMonster(CreatureSpawnEvent event) {
-        if (event.getEntity() instanceof Monster && event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.NATURAL && inside(event.getLocation())) event.setCancelled(true);
+        if (event.getEntity() instanceof Monster && event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.NATURAL && town(event.getLocation())) event.setCancelled(true);
     }
 }

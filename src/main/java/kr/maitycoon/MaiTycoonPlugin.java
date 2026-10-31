@@ -33,6 +33,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private long marketInterval, nextMarketChange;
     private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp", "autoplant");
     private static final String CUSTOM_CATEGORY = "특산물";
+    private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
     private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
     private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop");
     @Override public void onEnable() {
@@ -58,7 +59,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             shop = new Shop(this, market, store, catalog, crops, seeds, loadBuilding());
             dexMenu = new DexMenu(this, loadDex(), store);
             Map<String, Consumer<Player>> npcActions = new HashMap<>();
-            village = new Village(this, npcActions);
+            int reserve = getConfig().getInt("village.reserve");
+            if (reserve < 0) throw new IOException("Invalid village reserve");
+            village = new Village(this, npcActions, reserve, getConfig().getBoolean("village.protect-reserve"));
             long landPrice = getConfig().getLong("land.price"), landStep = getConfig().getLong("land.step");
             int landMax = getConfig().getInt("land.max");
             if (landPrice < 1 || landStep < 0 || landMax < 1) throw new IOException("Invalid land settings");
@@ -101,6 +104,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 if (System.currentTimeMillis() >= nextMarketChange) refreshPrices();
             }, 20L, 20L);
             getServer().getScheduler().runTaskTimer(this, () -> village.lookAtPlayers(), 20L, 10L);
+            getServer().getScheduler().runTaskTimer(this, () -> lands.refreshBanners(), 40L, 20L);
             getServer().getScheduler().runTask(this, () -> {
                 customCrops.start();
                 if (village.built()) { getServer().setSpawnRadius(0); village.upgradeStructures(); village.ensureNpcs(); }
@@ -122,6 +126,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         if ("농기구".equals(getConfig().getString("seeds.BONE_MEAL.category"))) {
             getConfig().set("seeds.BONE_MEAL.category", "비료");
+            changed = true;
+        }
+        if (getConfig().getInt("land.max") == OLD_LAND_LIMIT) {
+            getConfig().set("land.max", LAND_LIMIT);
             changed = true;
         }
         if (changed) saveConfig();
@@ -157,6 +165,11 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         return new LifeLamp(ranges);
     }
     /** The title for a menu: the shared dark panel for players with the pack, plain text otherwise. */
+    /** Boss bar text is centred, so trailing space pushes it toward the left edge. Without the pack it stays centred. */
+    Component bannerTitle(Player player, String text) {
+        Component title = Component.text(text, NamedTextColor.GOLD);
+        return shop.drawn(player) ? title.append(new ShopTitle().spaceRight(BANNER_SHIFT).build()) : title;
+    }
     Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
     void openLandTool(Player player, boolean lamp) throws IOException {
         if (lamp) lamps.open(player);
@@ -289,6 +302,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "autoplant" -> autoPlanting.open(player);
                 case "land" -> {
                     if (args.length >= 2 && args[1].equalsIgnoreCase("member")) lands.memberCommand(player, args);
+                    else if (args.length >= 2 && args[1].equalsIgnoreCase("buy")) lands.openBuy(player);
                     else lands.open(player);
                 }
                 case "village" -> {

@@ -11,6 +11,10 @@ public final class LandRegistry {
     private static final Set<Action> WORKER_ACTIONS = EnumSet.of(Action.TILL, Action.PLANT, Action.HARVEST);
     private final Map<String, Parcel> parcels = new HashMap<>();
     private final Map<UUID, Set<UUID>> workers = new HashMap<>();
+    /** A chunk is always 16 blocks wide. The shift rounds down, so block -1 is in chunk -1, not chunk 0. */
+    public static final int CHUNK_SIZE = 16;
+    public static int chunkOf(int block) { return block >> 4; }
+    public static int firstBlock(int chunk) { return chunk * CHUNK_SIZE; }
     public static String key(String world, int chunkX, int chunkZ) { return world + ":" + chunkX + ":" + chunkZ; }
     public static long price(long base, long step, int owned) { return Math.addExact(base, Math.multiplyExact(step, owned)); }
     public UUID owner(String key) {

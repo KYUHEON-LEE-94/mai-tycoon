@@ -49,5 +49,6 @@ final class ShopTitle {
         if(name>=0){moveTo(x+20);put(Key.key("maitycoon","names"+row),String.valueOf((char)(0xE500+name)),NamedTextColor.WHITE,49);}
         number("row"+row,x+56,compact(price));number("owned"+row,x,compact(owned));return this;
     }
+    ShopTitle spaceRight(int width){moveTo(cursor+width);return this;}
     Component build(){return title.build();}
 }

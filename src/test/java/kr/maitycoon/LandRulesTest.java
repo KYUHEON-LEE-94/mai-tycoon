@@ -49,6 +49,18 @@ class LandRulesTest {
         lands.put(NEXT, visitor);
         assertTrue(lands.crossesInto(HOME, NEXT));
     }
+    @Test void chunksAreSixteenBlocksIncludingNegativeCoordinates() {
+        assertEquals(16, LandRegistry.CHUNK_SIZE);
+        for (int chunk = -40; chunk <= 40; chunk++) {
+            int first = LandRegistry.firstBlock(chunk);
+            for (int offset = 0; offset < 16; offset++) assertEquals(chunk, LandRegistry.chunkOf(first + offset));
+            assertEquals(chunk - 1, LandRegistry.chunkOf(first - 1));
+            assertEquals(chunk + 1, LandRegistry.chunkOf(first + 16));
+        }
+        assertEquals(-1, LandRegistry.chunkOf(-1));
+        assertEquals(-1, LandRegistry.chunkOf(-16));
+        assertEquals(-2, LandRegistry.chunkOf(-17));
+    }
     private static final long DAY = 86_400_000L;
     private FootprintLog.Footprint leave(FootprintLog log, long now, long tick) {
         return log.add(visitor, owner, "w", 1, 64, 2, "WHEAT", "break", now, tick);

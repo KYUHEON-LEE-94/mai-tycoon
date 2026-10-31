@@ -32,6 +32,9 @@ public class GeneratePack {
         backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식"), "상품 클릭 · 구매", new Color(0x3F6C42)));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
         npcSkins();
+        // The land banner is only text; an empty white bar keeps it from looking like a boss fight.
+        png("assets/minecraft/textures/gui/sprites/boss_bar/white_background.png", new BufferedImage(182, 5, BufferedImage.TYPE_INT_ARGB));
+        png("assets/minecraft/textures/gui/sprites/boss_bar/white_progress.png", new BufferedImage(182, 5, BufferedImage.TYPE_INT_ARGB));
         customCrops();
         png("assets/maitycoon/textures/gui/digits.png", digits());
         text("assets/maitycoon/font/space.json", spaceFont());

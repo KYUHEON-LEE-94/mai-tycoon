@@ -26,6 +26,13 @@ import org.bukkit.inventory.*;
 
 /** Chunk land: purchase map, role-based protection and the footprints left by taking crops from a claim. */
 final class Lands implements Listener {
+    private static final class BuyHolder implements InventoryHolder {
+        private final int chunkX, chunkZ;
+        private boolean done;
+        private Inventory inventory;
+        private BuyHolder(int chunkX, int chunkZ) { this.chunkX = chunkX; this.chunkZ = chunkZ; }
+        @Override public Inventory getInventory() { return inventory; }
+    }
     private static final class Holder implements InventoryHolder {
         private final Map<Integer, int[]> chunks = new HashMap<>();
         private Inventory inventory;
@@ -37,6 +44,9 @@ final class Lands implements Listener {
     private final Village village;
     private final LandRegistry registry = new LandRegistry();
     private final FootprintLog footprints;
+    private final Map<UUID, net.kyori.adventure.bossbar.BossBar> banners = new HashMap<>();
+    private final Map<UUID, String> shown = new HashMap<>();
+    private final Map<UUID, Long> linkSent = new HashMap<>();
     private final FarmMenu farmMenu;
     private final File file, footprintFile;
     private final long price, step;
@@ -212,6 +222,79 @@ final class Lands implements Listener {
         }
         plugin.tell(player, "땅을 구매했습니다! 청크 " + cx + ", " + cz + " (-" + cost + " YD)");
     }
+    /** The banner text for where the player stands, or null when there is nothing to buy here. */
+    String bannerText(Player player) {
+        World world = village.world();
+        Location at = player.getLocation();
+        if (world == null || !world.equals(at.getWorld())) return null;
+        int cx = LandRegistry.chunkOf(at.getBlockX()), cz = LandRegistry.chunkOf(at.getBlockZ());
+        if (village.overlaps(world, cx, cz) || registry.owner(key(world, cx, cz)) != null) return null;
+        int owned = registry.count(player.getUniqueId());
+        if (owned >= max) return null;
+        try {
+            if (!store.load(player.getUniqueId()).landPermit()) return "구매 가능한 땅 · 땅 구매 이용권 필요";
+        } catch (IOException e) { return null; }
+        return String.format("[Shift+F] 이 땅 구매 · %,d YD", LandRegistry.price(price, step, owned));
+    }
+    void refreshBanners() {
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            UUID id = player.getUniqueId();
+            String text = bannerText(player);
+            if (Objects.equals(text, shown.get(id))) continue;
+            var old = banners.remove(id);
+            if (old != null) player.hideBossBar(old);
+            shown.remove(id);
+            if (text == null) continue;
+            var banner = net.kyori.adventure.bossbar.BossBar.bossBar(plugin.bannerTitle(player, text), 1f, net.kyori.adventure.bossbar.BossBar.Color.WHITE, net.kyori.adventure.bossbar.BossBar.Overlay.PROGRESS);
+            player.showBossBar(banner);
+            banners.put(id, banner);
+            shown.put(id, text);
+            offerLink(player, text);
+        }
+    }
+    /** The clickable alternative to the hotkey; rate limited so walking across land does not fill the chat. */
+    private void offerLink(Player player, String text) {
+        long now = System.currentTimeMillis();
+        if (!text.startsWith("[") || now - linkSent.getOrDefault(player.getUniqueId(), 0L) < 60_000) return;
+        linkSent.put(player.getUniqueId(), now);
+        player.sendMessage(Component.text("[이 땅 구매하기]", NamedTextColor.GREEN).clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand("/tycoon land buy")));
+    }
+    void openBuy(Player player) {
+        World world = village.world();
+        Location at = player.getLocation();
+        if (world == null || !world.equals(at.getWorld())) { plugin.tell(player, "땅은 마을이 있는 월드에서만 살 수 있습니다."); return; }
+        int cx = LandRegistry.chunkOf(at.getBlockX()), cz = LandRegistry.chunkOf(at.getBlockZ());
+        if (village.overlaps(world, cx, cz)) { plugin.tell(player, "마을 구역은 살 수 없습니다."); return; }
+        BuyHolder holder = new BuyHolder(cx, cz);
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "땅 구매"));
+        plugin.frame(holder.inventory, player);
+        int owned = registry.count(player.getUniqueId());
+        int x = LandRegistry.firstBlock(cx), z = LandRegistry.firstBlock(cz), size = LandRegistry.CHUNK_SIZE;
+        holder.inventory.setItem(13, Ui.icon(Material.GRASS_BLOCK, Ui.line("청크 " + cx + ", " + cz, NamedTextColor.YELLOW), List.of(
+            Ui.line("범위 X " + x + " ~ " + (x + size - 1) + ", Z " + z + " ~ " + (z + size - 1) + " (" + size + "×" + size + ")", NamedTextColor.GRAY),
+            Ui.line(String.format("가격 %,d YD", LandRegistry.price(price, step, owned)), NamedTextColor.GOLD),
+            Ui.line("보유 " + owned + " / " + max, NamedTextColor.GRAY))));
+        ItemStack yes = Ui.icon(Material.LIME_CONCRETE, Ui.line("구매", NamedTextColor.GREEN), List.of());
+        ItemStack no = Ui.icon(Material.RED_CONCRETE, Ui.line("취소", NamedTextColor.RED), List.of());
+        for (int slot : List.of(30, 31, 32)) holder.inventory.setItem(slot, yes);
+        for (int slot : List.of(39, 40, 41)) holder.inventory.setItem(slot, no);
+        player.openInventory(holder.inventory);
+    }
+    @EventHandler(ignoreCancelled = true)
+    public void onHotkey(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        String text = bannerText(player);
+        if (!player.isSneaking() || text == null) return;
+        event.setCancelled(true);
+        if (text.startsWith("[")) openBuy(player);
+        else plugin.tell(player, "땅 구매 이용권이 필요합니다. 수집 도감을 채워 얻으세요.");
+    }
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        UUID id = event.getPlayer().getUniqueId();
+        banners.remove(id);
+        shown.remove(id);
+    }
     private void showBorder(Player player) {
         Chunk chunk = player.getLocation().getChunk();
         int x = chunk.getX() << 4, z = chunk.getZ() << 4;
@@ -225,8 +308,19 @@ final class Lands implements Listener {
             }
         }, 0L, 10L);
     }
+    private void buyClick(InventoryClickEvent event, BuyHolder holder) {
+        event.setCancelled(true);
+        if (!(event.getWhoClicked() instanceof Player player) || event.getClick() != ClickType.LEFT) return;
+        int slot = event.getRawSlot();
+        if (slot >= 30 && slot <= 32 && !holder.done) {
+            holder.done = true;
+            plugin.guarded(player, () -> buy(player, holder.chunkX, holder.chunkZ));
+        } else if (slot < 39 || slot > 41) return;
+        plugin.getServer().getScheduler().runTask(plugin, () -> player.closeInventory());
+    }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
+        if (event.getView().getTopInventory().getHolder() instanceof BuyHolder buying) { buyClick(event, buying); return; }
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -243,7 +337,8 @@ final class Lands implements Listener {
     }
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof Holder) event.setCancelled(true);
+        Object top = event.getView().getTopInventory().getHolder();
+        if (top instanceof Holder || top instanceof BuyHolder) event.setCancelled(true);
     }
     List<FootprintLog.Footprint> reportable(Player player) { return footprints.reportable(player.getUniqueId(), System.currentTimeMillis()); }
     List<String> workerNames(Player player) { return registry.workers(player.getUniqueId()).stream().map(this::ownerName).sorted().toList(); }
