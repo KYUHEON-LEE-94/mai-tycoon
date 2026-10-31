@@ -29,7 +29,9 @@ final class Village implements Listener {
         new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, 0f, "작물 상인", Villager.Profession.FARMER),
         new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, 0f, "씨앗 상인", Villager.Profession.FLETCHER),
         new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", Villager.Profession.LIBRARIAN),
-        new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", Villager.Profession.CARTOGRAPHER));
+        // Not a cartographer: saving a villager can generate its trades, and map trades search for
+        // structures, which fails during chunk unload and loses the entity.
+        new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", Villager.Profession.MASON));
     static final Set<Material> FARMABLE = EnumSet.of(Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
         Material.MELON, Material.PUMPKIN, Material.MELON_STEM, Material.PUMPKIN_STEM, Material.ATTACHED_MELON_STEM, Material.ATTACHED_PUMPKIN_STEM,
         Material.SUGAR_CANE, Material.CACTUS, Material.BAMBOO, Material.BAMBOO_SAPLING, Material.COCOA, Material.SWEET_BERRY_BUSH,
@@ -135,8 +137,6 @@ final class Village implements Listener {
                 if (npc.id().equals(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) entity.remove();
             }
             world.spawn(at, Villager.class, villager -> {
-                // Empty offers stop vanilla trade generation, which fails when a save runs it during chunk unload.
-                villager.setRecipes(List.of());
                 villager.setProfession(npc.profession());
                 villager.setVillagerLevel(5);
                 villager.customName(Component.text(npc.name(), NamedTextColor.GREEN));
