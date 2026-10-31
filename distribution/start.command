@@ -26,6 +26,6 @@ if ! [[ -f eula.txt ]] || ! grep -Eq '^eula=true\r?$' eula.txt; then
   echo 'eula=true' > eula.txt
 fi
 if [[ ! -f server.properties ]]; then
-  printf '%s\n' 'server-ip=127.0.0.1' 'server-port=25565' 'online-mode=true' 'gamemode=survival' 'difficulty=easy' 'view-distance=8' 'simulation-distance=6' 'motd=Mai Tycoon Local' > server.properties
+  printf '%s\n' 'server-ip=127.0.0.1' 'server-port=25565' 'online-mode=true' 'level-seed=607115319713086458' 'gamemode=survival' 'difficulty=easy' 'view-distance=8' 'simulation-distance=6' 'motd=Mai Tycoon Local' > server.properties
 fi
 "$JAVA" -Xms512M -Xmx2G -jar paper.jar --nogui

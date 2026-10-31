@@ -16,7 +16,7 @@ try {
         'eula=true' | Set-Content 'eula.txt' -Encoding ASCII
     }
     if (-not (Test-Path 'server.properties')) {
-        @('server-ip=127.0.0.1','server-port=25565','online-mode=true','gamemode=survival','difficulty=easy','view-distance=8','simulation-distance=6','motd=Mai Tycoon Local') | Set-Content 'server.properties' -Encoding ASCII
+        @('server-ip=127.0.0.1','server-port=25565','online-mode=true','level-seed=607115319713086458','gamemode=survival','difficulty=easy','view-distance=8','simulation-distance=6','motd=Mai Tycoon Local') | Set-Content 'server.properties' -Encoding ASCII
     }
     & $java -Xms512M -Xmx2G -jar paper.jar --nogui
 } catch { Write-Host $_ -ForegroundColor Red }
