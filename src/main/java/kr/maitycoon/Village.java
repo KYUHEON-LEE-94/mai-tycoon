@@ -227,6 +227,8 @@ final class Village implements Listener {
         int dx = block.getX() - x, dz = block.getZ() - z;
         return VillageBuilder.FARMS.stream().anyMatch(zone -> zone.contains(dx, dz));
     }
+    /** Inside the village only the shared farm plots replant. */
+    boolean mayReplant(Block block) { return !inside(block.getLocation()) || farm(block); }
     boolean allowsPlanting(Player player, Block block) {
         if (!guarded(player, block) || farm(block)) return true;
         refuse(player);

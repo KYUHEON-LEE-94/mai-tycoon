@@ -23,7 +23,7 @@ public final class ProfileStore {
             if (!yaml.isLong("experience") && !yaml.isInt("experience")) throw new IOException("Invalid experience");
             if (!yaml.isBoolean("starter-claimed")) throw new IOException("Invalid starter flag");
             return new Profile(yaml.getLong("coins"), yaml.getLong("zcoin"), yaml.getLong("experience"), yaml.getBoolean("starter-claimed"),
-                new HashSet<>(yaml.getStringList("dex")), new HashSet<>(yaml.getIntegerList("dex-rewards")), yaml.getBoolean("land-permit"), yaml.getLong("lamps"));
+                new HashSet<>(yaml.getStringList("dex")), new HashSet<>(yaml.getIntegerList("dex-rewards")), yaml.getBoolean("land-permit"), yaml.getLong("lamps"), yaml.getLong("replants"), yaml.getBoolean("auto-plant"));
         } catch (InvalidConfigurationException | IllegalArgumentException e) {
             throw new IOException("Invalid profile: " + id, e);
         }
@@ -39,6 +39,8 @@ public final class ProfileStore {
         yaml.set("dex-rewards", new TreeSet<>(profile.dexRewards()).stream().toList());
         yaml.set("land-permit", profile.landPermit());
         yaml.set("lamps", profile.lamps());
+        yaml.set("replants", profile.replants());
+        yaml.set("auto-plant", profile.autoPlant());
         Path temp = Files.createTempFile(directory, id.toString(), ".tmp");
         try {
             Files.writeString(temp, yaml.saveToString());

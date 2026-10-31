@@ -31,7 +31,7 @@ final class Lands implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int COLUMNS = 9, ROWS = 5, INFO = 45, MINE = 47, PERMIT = 49, FARM = 51, SHOW = 53;
+    private static final int COLUMNS = 9, ROWS = 5, INFO = 45, AUTO_PLANT = 46, MINE = 47, LAMP = 48, PERMIT = 49, FARM = 51, SHOW = 53;
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
     private final Village village;
@@ -158,6 +158,8 @@ final class Lands implements Listener {
         inventory.setItem(PERMIT, Ui.icon(profile.landPermit() ? Material.PAPER : Material.BARRIER,
             Ui.line(profile.landPermit() ? "땅 구매 이용권 보유" : "땅 구매 이용권 없음", profile.landPermit() ? NamedTextColor.GREEN : NamedTextColor.RED),
             List.of(Ui.line("수집 도감 보상으로 얻습니다.", NamedTextColor.GRAY))));
+        inventory.setItem(AUTO_PLANT, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기", NamedTextColor.YELLOW), List.of(Ui.line("남은 횟수 " + profile.replants() + "회", NamedTextColor.GRAY))));
+        inventory.setItem(LAMP, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 램프", NamedTextColor.YELLOW), List.of(Ui.line("보유 " + profile.lamps() + "개", NamedTextColor.GRAY), Ui.line("괭이를 손에 든 채 누르세요.", NamedTextColor.GRAY))));
         inventory.setItem(FARM, Ui.icon(Material.WRITABLE_BOOK, Ui.line("농장 관리", NamedTextColor.YELLOW), List.of(
             Ui.line("신고할 수 있는 발자국 " + reportable(player).size() + "건", NamedTextColor.GRAY), Ui.line("작업자 " + registry.workers(player.getUniqueId()).size() + "명", NamedTextColor.GRAY))));
         inventory.setItem(SHOW, Ui.icon(Material.SPYGLASS, Ui.line("청크 경계 보기", NamedTextColor.AQUA), List.of(Ui.line("지금 서 있는 청크의 경계를 잠시 표시합니다.", NamedTextColor.GRAY))));
@@ -231,6 +233,10 @@ final class Lands implements Listener {
         int raw = event.getRawSlot();
         if (raw == SHOW) { player.closeInventory(); showBorder(player); return; }
         if (raw == FARM) { plugin.getServer().getScheduler().runTask(plugin, () -> farmMenu.open(player)); return; }
+        if (raw == AUTO_PLANT || raw == LAMP) {
+            plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> plugin.openLandTool(player, raw == LAMP)));
+            return;
+        }
         int[] chunk = holder.chunks.get(raw);
         if (chunk == null || event.getClick() != ClickType.RIGHT) return;
         plugin.guarded(player, () -> { buy(player, chunk[0], chunk[1]); render(holder, player); });
@@ -268,6 +274,11 @@ final class Lands implements Listener {
         boolean changed = add ? registry.addWorker(owner, target.getUniqueId()) : registry.removeWorker(owner, target.getUniqueId());
         if (changed) save();
         plugin.tell(player, !changed ? "변경된 내용이 없습니다." : args[3] + (add ? "을(를) 작업자로 추가했습니다." : "을(를) 작업자에서 제외했습니다."));
+    }
+    /** Own or worker land, or unclaimed ground. Never someone else's land, even for admins. */
+    boolean mayReplant(Player player, Block block) {
+        var role = registry.role(key(block), player.getUniqueId());
+        return role != LandRegistry.Role.VISITOR;
     }
     boolean allowsPlanting(Player player, Block block) { return !refused(player, block, LandRegistry.Action.PLANT); }
     private boolean refused(Player player, Block block, LandRegistry.Action action) {

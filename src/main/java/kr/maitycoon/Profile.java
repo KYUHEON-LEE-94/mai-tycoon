@@ -3,35 +3,43 @@ package kr.maitycoon;
 import java.util.*;
 
 /** coins is YD, the trading currency. zcoin is a separate reward currency and never converts into YD. */
-public record Profile(long coins, long zcoin, long experience, boolean starterClaimed, Set<String> dex, Set<Integer> dexRewards, boolean landPermit, long lamps) {
+public record Profile(long coins, long zcoin, long experience, boolean starterClaimed, Set<String> dex, Set<Integer> dexRewards, boolean landPermit, long lamps, long replants, boolean autoPlant) {
     public Profile {
-        if (coins < 0 || zcoin < 0 || experience < 0 || lamps < 0) throw new IllegalArgumentException("Negative profile value");
+        if (coins < 0 || zcoin < 0 || experience < 0 || lamps < 0 || replants < 0) throw new IllegalArgumentException("Negative profile value");
         dex = Set.copyOf(dex);
         dexRewards = Set.copyOf(dexRewards);
     }
     public Profile(long coins, long experience, boolean starterClaimed) {
-        this(coins, 0, experience, starterClaimed, Set.of(), Set.of(), false, 0);
+        this(coins, 0, experience, starterClaimed, Set.of(), Set.of(), false, 0, 0, false);
     }
     public static Profile empty() { return new Profile(0, 0, false); }
     public Profile sell(long income) {
         if (income <= 0) throw new IllegalArgumentException("Invalid sale");
-        return new Profile(Math.addExact(coins, income), zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps);
+        return new Profile(Math.addExact(coins, income), zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant);
     }
     public Profile spend(long cost) {
         if (cost <= 0) throw new IllegalArgumentException("Invalid purchase");
-        return new Profile(coins - cost, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps);
+        return new Profile(coins - cost, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant);
     }
-    public Profile useLamp() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps - 1); }
-    public Profile addLamps(long count) { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, Math.addExact(lamps, count)); }
-    public Profile claimStarter() { return new Profile(coins, zcoin, experience, true, dex, dexRewards, landPermit, lamps); }
+    public Profile useLamp() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps - 1, replants, autoPlant); }
+    public Profile addLamps(long count) { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, Math.addExact(lamps, count), replants, autoPlant); }
+    public Profile useReplant() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants - 1, autoPlant); }
+    public Profile addReplants(long count) { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, Math.addExact(replants, count), autoPlant); }
+    /** Buying turns the feature on, since nobody buys uses to leave them idle. */
+    public Profile buyReplants(long zcoinCost, long count) {
+        if (zcoinCost <= 0 || count <= 0) throw new IllegalArgumentException("Invalid purchase");
+        return new Profile(coins, zcoin - zcoinCost, experience, starterClaimed, dex, dexRewards, landPermit, lamps, Math.addExact(replants, count), true);
+    }
+    public Profile toggleAutoPlant() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, !autoPlant); }
+    public Profile claimStarter() { return new Profile(coins, zcoin, experience, true, dex, dexRewards, landPermit, lamps, replants, autoPlant); }
     public Profile collect(String id) {
         Set<String> next = new HashSet<>(dex);
         if (!next.add(id)) throw new IllegalArgumentException("Already registered");
-        return new Profile(coins, zcoin, experience, starterClaimed, next, dexRewards, landPermit, lamps);
+        return new Profile(coins, zcoin, experience, starterClaimed, next, dexRewards, landPermit, lamps, replants, autoPlant);
     }
     public Profile claimReward(int tier, Dex.Reward reward) {
         Set<Integer> next = new HashSet<>(dexRewards);
         if (!next.add(tier)) throw new IllegalArgumentException("Reward already claimed");
-        return new Profile(Math.addExact(coins, reward.coins()), Math.addExact(zcoin, reward.zcoin()), experience, starterClaimed, dex, next, landPermit || reward.landPermit(), Math.addExact(lamps, reward.lamps()));
+        return new Profile(Math.addExact(coins, reward.coins()), Math.addExact(zcoin, reward.zcoin()), experience, starterClaimed, dex, next, landPermit || reward.landPermit(), Math.addExact(lamps, reward.lamps()), replants, autoPlant);
     }
 }

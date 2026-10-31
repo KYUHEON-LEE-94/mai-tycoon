@@ -28,9 +28,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private Catalog catalog;
     private CustomCrops customCrops;
     private Lamps lamps;
+    private AutoPlanting autoPlanting;
     private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
-    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp");
+    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp", "autoplant");
     private static final String CUSTOM_CATEGORY = "특산물";
     private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
     private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop");
@@ -82,6 +83,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             village.onShowcase(customCrops::plantShowcase);
             lamps = new Lamps(this, store, loadLamp());
             getServer().getPluginManager().registerEvents(lamps, this);
+            long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
+            if (plantPrice < 1 || plantUses < 1) throw new IOException("Invalid auto-plant settings");
+            autoPlanting = new AutoPlanting(this, store, village, lands, plantPrice, plantUses);
+            getServer().getPluginManager().registerEvents(autoPlanting, this);
             try {
                 resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
                 getServer().getPluginManager().registerEvents(resourcePack, this);
@@ -153,6 +158,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     }
     /** The title for a menu: the shared dark panel for players with the pack, plain text otherwise. */
     Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
+    void openLandTool(Player player, boolean lamp) throws IOException {
+        if (lamp) lamps.open(player);
+        else autoPlanting.open(player);
+    }
     void frame(org.bukkit.inventory.Inventory inventory, Player player) {
         if (shop.drawn(player)) inventory.clear();
         else Ui.frame(inventory);
@@ -277,6 +286,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "starter" -> starter(player);
                 case "dex" -> dexMenu.open(player);
                 case "lamp" -> lamps.open(player);
+                case "autoplant" -> autoPlanting.open(player);
                 case "land" -> {
                     if (args.length >= 2 && args[1].equalsIgnoreCase("member")) lands.memberCommand(player, args);
                     else lands.open(player);
@@ -293,6 +303,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
                     tell(player, "/tycoon lamp — 손에 든 괭이에 생활 램프 적용");
+                    tell(player, "/tycoon autoplant — 자동 심기 설정");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
                     tell(player, "/tycoon info — 보유 YD와 즈코인 확인");
@@ -309,11 +320,11 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         boolean buildNow = action.equals("village") && args.length == 3 && args[1].equalsIgnoreCase("build") && args[2].equalsIgnoreCase("confirm");
         boolean step = action.equals("market") && args.length == 2 && args[1].equalsIgnoreCase("next");
         boolean records = action.equals("journal");
-        boolean giveLamp = action.equals("lamp") && args.length == 4 && args[1].equalsIgnoreCase("give");
+        boolean giveLamp = (action.equals("lamp") || action.equals("autoplant")) && args.length == 4 && args[1].equalsIgnoreCase("give");
         if (!build && !buildNow && !step && !records && !giveLamp) return false;
         if (!sender.hasPermission("maitycoon.admin")) { sender.sendMessage("권한이 없습니다."); return true; }
         if (step) { refreshPrices(); sender.sendMessage("시세를 갱신했습니다."); }
-        else if (giveLamp) giveLamp(sender, args[2], args[3]);
+        else if (giveLamp) give(sender, args[2], args[3], action.equals("lamp"));
         else if (build) sender.sendMessage("월드 스폰 주변 약 110칸 사방의 지형을 평탄화하고 마을을 짓습니다. 되돌릴 수 없으니 월드를 백업한 뒤 /tycoon village build confirm 을 입력하세요.");
         else if (buildNow) {
             sender.sendMessage("마을을 짓습니다.");
@@ -322,14 +333,15 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         else journal(sender, args);
         return true;
     }
-    private void giveLamp(CommandSender sender, String name, String amount) {
+    private void give(CommandSender sender, String name, String amount, boolean lamp) {
         var target = getServer().getOfflinePlayerIfCached(name);
         if (target == null) { sender.sendMessage("서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다."); return; }
         try {
             long count = Long.parseLong(amount);
             if (count < 1) throw new NumberFormatException();
-            store.save(target.getUniqueId(), store.load(target.getUniqueId()).addLamps(count));
-            sender.sendMessage(name + "에게 생활 램프 " + count + "개를 지급했습니다.");
+            Profile profile = store.load(target.getUniqueId());
+            store.save(target.getUniqueId(), lamp ? profile.addLamps(count) : profile.addReplants(count));
+            sender.sendMessage(name + "에게 " + (lamp ? "생활 램프 " + count + "개" : "자동 심기 " + count + "회") + "를 지급했습니다.");
         } catch (NumberFormatException e) { sender.sendMessage("개수를 확인해 주세요."); }
         catch (IOException e) {
             getLogger().log(Level.SEVERE, "Cannot give lamp", e);

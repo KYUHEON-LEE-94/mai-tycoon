@@ -87,6 +87,11 @@ lamp:
   CROP: {min-percent: 20, max-percent: 50, min-amount: 1, max-amount: 3}
   SEED: {min-percent: 20, max-percent: 50, min-amount: 1, max-amount: 3}
   BONE_MEAL: {min-percent: 10, max-percent: 50, min-amount: 1, max-amount: 2}
+# 자동 심기. 자료의 "100회 주문서 10개 묶음"을 즈코인 1개에 1000회로 옮겼습니다.
+# 원본은 도감 200개 히든 상점 판매이고 씨앗·횟수 소모 방식은 미확인이라 제안 구현입니다.
+auto-plant:
+  zcoin-price: 1
+  uses: 1000
 # 청크 단위 땅. 최대 9개는 원본 기준이고, 가격은 미확인이라 개발용 값입니다.
 # n번째 땅 가격 = price + step × (이미 보유한 땅 수)
 land:

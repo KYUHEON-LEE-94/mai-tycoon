@@ -1,5 +1,5 @@
 name: MaiTycoon
-version: 0.7.0
+version: 0.8.0
 main: kr.maitycoon.MaiTycoonPlugin
 api-version: '1.21.11'
 description: 농사로 시작하는 생활 타이쿤
