@@ -14,7 +14,7 @@ import org.bukkit.block.sign.Side;
  */
 final class VillageBuilder {
     static final int RADIUS = 44, BLEND = 10, SPAWN_DZ = 7;
-    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -15, PLAZA_NPC_X = 9;
+    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -15, PLAZA_NPC_X = 9, STALL_BACK = -21, STALL_FRONT = -13;
     private static final int PLAZA = 12, ROAD = 2, DEPTH = 24, CLEAR_MAX_ABOVE = 80;
     private static final int[][] PLOTS = {{16, 16}, {27, 16}, {16, 27}, {27, 27}};
     private static final Village.Zone CANE = new Village.Zone(-36, 17, -30, 23), CACTUS = new Village.Zone(-28, 17, -22, 23),
@@ -84,16 +84,8 @@ final class VillageBuilder {
         roads();
         plaza();
         fountain();
-        stall(MARKET_STALL_X, Material.YELLOW_WOOL, Material.WHITE_WOOL, "농산물 상점", "작물 판매",
-            List.of(Material.HAY_BLOCK, Material.MELON, Material.PUMPKIN, Material.BARREL, Material.HAY_BLOCK));
-        stall(SEED_STALL_X, Material.GREEN_WOOL, Material.WHITE_WOOL, "씨앗 상점", "씨앗·도구 구매",
-            List.of(Material.BARREL, Material.COMPOSTER, Material.BARREL, Material.COMPOSTER, Material.BARREL));
-        building(-36, -15, -16, -5, 5, Material.STONE_BRICKS, BlockFace.SOUTH, -26, "마을회관");
-        building(16, -13, 24, -5, 4, Material.OAK_PLANKS, BlockFace.SOUTH, 22, "민가");
-        building(28, -13, 36, -5, 4, Material.SPRUCE_PLANKS, BlockFace.SOUTH, 34, "민가");
-        building(16, 5, 24, 12, 4, Material.BIRCH_PLANKS, BlockFace.NORTH, 22, "민가");
-        building(28, 5, 36, 12, 4, Material.OAK_PLANKS, BlockFace.NORTH, 34, "민가");
-        building(-36, 5, -16, 12, 5, Material.COBBLESTONE, BlockFace.NORTH, -26, "공동 창고");
+        shops();
+        buildings();
         for (int i = 0; i < PLOTS.length; i++) plot(PLOTS[i][0], PLOTS[i][1], i);
         specialtyBeds();
         perimeter();
@@ -139,56 +131,136 @@ final class VillageBuilder {
             set(face.getModX(), 2, face.getModZ(), Material.STONE_BRICK_SLAB);
         }
     }
-    /** Open stall on the north edge of the plaza; the NPC stands behind the counter facing south. */
-    private void stall(int mid, Material stripeA, Material stripeB, String title, String purpose, List<Material> crates) {
-        int back = -19, front = -13;
-        rect(mid - 4, back, mid + 4, front, 0, Material.OAK_PLANKS);
-        for (int dx : new int[]{mid - 4, mid + 4}) for (int dz : new int[]{back, front}) for (int y = 1; y <= 3; y++) set(dx, y, dz, Material.OAK_LOG);
-        for (int dx = mid - 3; dx <= mid + 3; dx++) for (int y = 1; y <= 3; y++) set(dx, y, back, Material.SPRUCE_PLANKS);
-        for (int dx = mid - 5; dx <= mid + 5; dx++) for (int dz = back - 1; dz <= front + 1; dz++) {
-            set(dx, 4, dz, Math.floorMod(dx, 2) == 0 ? stripeA : stripeB);
+    /** Clears and draws both shop buildings and the two plaza desks; also used to upgrade older villages. */
+    void shops() {
+        for (int dx = -13; dx <= 13; dx++) for (int dz = STALL_BACK - 1; dz <= STALL_FRONT + 2; dz++) {
+            if (Math.abs(dx) <= ROAD) continue;
+            for (int y = 1; y <= 11; y++) set(dx, y, dz, Material.AIR);
         }
-        for (int dx = mid - 3; dx <= mid + 3; dx++) set(dx, 1, front, Material.SPRUCE_PLANKS);
-        for (int i = 0; i < crates.size(); i++) set(mid - 2 + i, 1, back + 1, crates.get(i));
-        set(mid - 3, 2, front, Material.LANTERN);
-        set(mid + 3, 2, front, Material.LANTERN);
+        shop(MARKET_STALL_X, Material.YELLOW_WOOL, Material.WHITE_WOOL, "농산물 상점", "작물을 사들입니다",
+            List.of(Material.HAY_BLOCK, Material.PUMPKIN, Material.MELON, Material.HAY_BLOCK, Material.PUMPKIN), Material.HAY_BLOCK);
+        shop(SEED_STALL_X, Material.GREEN_WOOL, Material.WHITE_WOOL, "씨앗 상점", "씨앗과 농기구",
+            List.of(Material.BARREL, Material.COMPOSTER, Material.BARREL, Material.COMPOSTER, Material.BARREL), Material.BARREL);
+        set(-PLAZA_NPC_X - 1, 1, -1, Material.BOOKSHELF);
+        set(-PLAZA_NPC_X - 1, 1, 1, Material.BOOKSHELF);
+        set(-PLAZA_NPC_X - 1, 2, -1, Material.LANTERN);
+        set(-PLAZA_NPC_X - 1, 2, 1, Material.LANTERN);
+        set(-PLAZA_NPC_X + 1, 1, 0, Material.LECTERN);
+        set(PLAZA_NPC_X + 1, 1, -1, Material.CARTOGRAPHY_TABLE);
+        set(PLAZA_NPC_X + 1, 1, 1, Material.CARTOGRAPHY_TABLE);
+        set(PLAZA_NPC_X + 1, 2, -1, Material.LANTERN);
+        set(PLAZA_NPC_X + 1, 2, 1, Material.LANTERN);
+    }
+    /** Timber shop facing south onto the plaza: plaster walls, clay roof, striped awning, and the NPC behind the counter. */
+    private void shop(int mid, Material stripeA, Material stripeB, String title, String purpose, List<Material> goods, Material display) {
+        int back = STALL_BACK, front = STALL_FRONT, west = mid - 4, east = mid + 4, wallTop = 4;
+        rect(west, back, east, front, 0, Material.SPRUCE_PLANKS);
+        for (int dx = west; dx <= east; dx++) set(dx, 0, front, Material.STONE_BRICKS);
+        for (int y = 1; y <= wallTop; y++) {
+            for (int dz = back; dz <= front; dz++) {
+                boolean frame = dz == back || dz == front || dz == front - 3 || y == 1 || y == wallTop;
+                set(west, y, dz, frame ? Material.STRIPPED_SPRUCE_LOG : Material.WHITE_TERRACOTTA);
+                set(east, y, dz, frame ? Material.STRIPPED_SPRUCE_LOG : Material.WHITE_TERRACOTTA);
+            }
+            for (int dx = west; dx <= east; dx++) {
+                boolean frame = dx == west || dx == east || dx == mid || y == 1 || y == wallTop;
+                set(dx, y, back, frame ? Material.STRIPPED_SPRUCE_LOG : Material.WHITE_TERRACOTTA);
+            }
+        }
+        for (int dz = back + 2; dz <= front - 5; dz += 2) { set(west, 2, dz, Material.GLASS); set(east, 2, dz, Material.GLASS); }
+        for (int layer = 0; layer <= 5; layer++) {
+            int y = wallTop + 1 + layer, left = west - 1 + layer, right = east + 1 - layer;
+            for (int dz = back - 1; dz <= front; dz++) {
+                if (left == right) { set(left, y, dz, Material.BRICK_SLAB); continue; }
+                data(left, y, dz, stairs(Material.BRICK_STAIRS, BlockFace.EAST));
+                data(right, y, dz, stairs(Material.BRICK_STAIRS, BlockFace.WEST));
+            }
+            for (int dx = left + 1; dx < right; dx++) {
+                set(dx, y, back, Material.WHITE_TERRACOTTA);
+                set(dx, y, front, Material.WHITE_TERRACOTTA);
+            }
+        }
+        for (int dx = west - 1; dx <= east + 1; dx++) {
+            Material stripe = Math.floorMod(dx, 2) == 0 ? stripeA : stripeB;
+            set(dx, 4, front + 1, stripe);
+            set(dx, 3, front + 2, stripe);
+        }
+        for (int dx = mid - 3; dx <= mid + 3; dx++) {
+            set(dx, 1, front, Math.abs(dx - mid) == 3 ? Material.BARREL : Material.SPRUCE_PLANKS);
+            set(dx, 4, front, Material.STRIPPED_SPRUCE_LOG);
+        }
+        set(mid - 3, 2, front, display);
+        set(mid + 3, 2, front, display);
+        for (int i = 0; i < goods.size(); i++) {
+            set(mid - 2 + i, 1, back + 1, goods.get(i));
+            if (i % 2 == 0) set(mid - 2 + i, 2, back + 1, Material.LANTERN);
+        }
+        set(mid - 3, 3, front + 1, Material.LANTERN);
+        set(mid + 3, 3, front + 1, Material.LANTERN);
         wallSign(mid, 1, front + 1, BlockFace.SOUTH, Material.SPRUCE_WALL_SIGN, title, purpose);
     }
-    private void building(int x1, int z1, int x2, int z2, int height, Material wall, BlockFace front, int doorX, String name) {
-        rect(x1, z1, x2, z2, 0, Material.OAK_PLANKS);
-        int doorZ = front == BlockFace.SOUTH ? z2 : z1;
+    /** Every house-sized building. Clears its own footprint, so it also upgrades an older village. */
+    void buildings() {
+        building(-36, -15, -16, -5, 5, Material.DEEPSLATE_TILE_STAIRS, BlockFace.SOUTH, -26, "마을회관");
+        building(16, -13, 24, -5, 4, Material.BRICK_STAIRS, BlockFace.SOUTH, 22, "민가");
+        building(28, -13, 36, -5, 4, Material.DARK_OAK_STAIRS, BlockFace.SOUTH, 34, "민가");
+        building(16, 5, 24, 12, 4, Material.SPRUCE_STAIRS, BlockFace.NORTH, 22, "민가");
+        building(28, 5, 36, 12, 4, Material.BRICK_STAIRS, BlockFace.NORTH, 34, "민가");
+        building(-36, 5, -16, 12, 5, Material.DARK_OAK_STAIRS, BlockFace.NORTH, -26, "공동 창고");
+    }
+    /** Timber-framed plaster walls on a stone base, with window boxes, a pitched roof and a chimney. */
+    private void building(int x1, int z1, int x2, int z2, int height, Material roofStairs, BlockFace front, int doorX, String name) {
+        for (int dx = x1 - 1; dx <= x2 + 1; dx++) for (int dz = z1 - 1; dz <= z2 + 1; dz++) for (int y = 1; y <= height + 9; y++) set(dx, y, dz, Material.AIR);
+        rect(x1, z1, x2, z2, 0, Material.SPRUCE_PLANKS);
+        int doorZ = front == BlockFace.SOUTH ? z2 : z1, outward = front == BlockFace.SOUTH ? 1 : -1;
         for (int dx = x1; dx <= x2; dx++) for (int dz = z1; dz <= z2; dz++) {
-            boolean edge = dx == x1 || dx == x2 || dz == z1 || dz == z2;
-            if (!edge) continue;
+            if (dx != x1 && dx != x2 && dz != z1 && dz != z2) continue;
             boolean corner = (dx == x1 || dx == x2) && (dz == z1 || dz == z2);
+            int along = dz == z1 || dz == z2 ? dx - x1 : dz - z1;
+            boolean post = corner || along % 4 == 0;
             for (int y = 1; y <= height; y++) {
-                boolean window = !corner && y == 2 && (dx - x1 + dz - z1) % 3 == 1;
-                set(dx, y, dz, corner ? Material.OAK_LOG : window ? Material.GLASS : wall);
+                boolean window = !post && y >= 2 && y < height && along % 4 == 2;
+                set(dx, y, dz, y == 1 ? Material.COBBLESTONE : post || y == height ? Material.STRIPPED_SPRUCE_LOG : window ? Material.GLASS : Material.WHITE_TERRACOTTA);
+            }
+            if (!post && dz == doorZ && along % 4 == 2 && Math.abs(dx - doorX) > 1) {
+                set(dx, 1, dz + outward, Material.FLOWERING_AZALEA_LEAVES);
+                set(dx, 2, dz + outward, along % 8 == 2 ? Material.POPPY : Material.DANDELION);
             }
         }
         for (int y = 1; y <= 2; y++) set(doorX, y, doorZ, Material.AIR);
         door(doorX, 1, doorZ, front.getOppositeFace());
-        int outward = front == BlockFace.SOUTH ? 1 : -1;
+        for (int side : new int[]{-1, 1}) { set(doorX + side, 3, doorZ + outward, Material.LANTERN); set(doorX + side, 2, doorZ + outward, Material.STRIPPED_SPRUCE_LOG); set(doorX + side, 1, doorZ + outward, Material.STRIPPED_SPRUCE_LOG); }
         wallSign(doorX, 3, doorZ + outward, front, Material.OAK_WALL_SIGN, name);
         for (int dz = doorZ + outward; Math.abs(dz) > ROAD; dz += outward) set(doorX, 0, dz, Material.STONE_BRICKS);
-        roof(x1, z1, x2, z2, height, wall);
+        roof(x1, z1, x2, z2, height, roofStairs);
+        int chimneyX = x2 - 2, chimneyZ = z1 + 2;
+        for (int y = height + 1; y <= height + 7; y++) set(chimneyX, y, chimneyZ, Material.BRICKS);
         set(x1 + 1, 1, z1 + 1, Material.CRAFTING_TABLE);
         set(x2 - 1, 1, z1 + 1, Material.BARREL);
         set(x2 - 1, 2, z1 + 1, Material.LANTERN);
         set(x1 + 1, 1, z2 - 1, Material.BARREL);
         set(x1 + 1, 2, z2 - 1, Material.LANTERN);
     }
-    private void roof(int x1, int z1, int x2, int z2, int height, Material wall) {
+    private void roof(int x1, int z1, int x2, int z2, int height, Material stairs) {
         int north = z1 - 1, south = z2 + 1;
         for (int layer = 0; north + layer <= south - layer; layer++) {
             int y = height + 1 + layer, n = north + layer, s = south - layer;
             for (int dx = x1 - 1; dx <= x2 + 1; dx++) {
-                if (n == s) { set(dx, y, n, Material.DARK_OAK_SLAB); continue; }
-                data(dx, y, n, stairs(Material.DARK_OAK_STAIRS, BlockFace.SOUTH));
-                data(dx, y, s, stairs(Material.DARK_OAK_STAIRS, BlockFace.NORTH));
+                if (n == s) { set(dx, y, n, Material.STRIPPED_SPRUCE_LOG); continue; }
+                data(dx, y, n, stairs(stairs, BlockFace.SOUTH));
+                data(dx, y, s, stairs(stairs, BlockFace.NORTH));
             }
-            for (int dz = n + 1; dz < s; dz++) { set(x1, y, dz, wall); set(x2, y, dz, wall); }
+            for (int dz = n + 1; dz < s; dz++) { set(x1, y, dz, Material.WHITE_TERRACOTTA); set(x2, y, dz, Material.WHITE_TERRACOTTA); }
         }
+    }
+    /** Soil in shared plots 3 and 4 used to show custom crops, in alternating rows so players can still walk between them. */
+    List<Block> showcaseSoil() {
+        List<Block> soil = new ArrayList<>();
+        for (int plot = 2; plot < PLOTS.length; plot++) for (int dz = 0; dz <= 8; dz += 2) for (int dx = 0; dx <= 8; dx++) {
+            if (dx == 4 && dz == 4) continue;
+            soil.add(at(PLOTS[plot][0] + dx, 0, PLOTS[plot][1] + dz));
+        }
+        return soil;
     }
     private void plot(int px, int pz, int index) {
         Farmland wet = (Farmland) Material.FARMLAND.createBlockData();

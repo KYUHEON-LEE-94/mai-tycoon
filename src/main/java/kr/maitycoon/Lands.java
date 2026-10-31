@@ -269,6 +269,7 @@ final class Lands implements Listener {
         if (changed) save();
         plugin.tell(player, !changed ? "변경된 내용이 없습니다." : args[3] + (add ? "을(를) 작업자로 추가했습니다." : "을(를) 작업자에서 제외했습니다."));
     }
+    boolean allowsPlanting(Player player, Block block) { return !refused(player, block, LandRegistry.Action.PLANT); }
     private boolean refused(Player player, Block block, LandRegistry.Action action) {
         if (registry.allows(key(block), player.getUniqueId(), action) || player.hasPermission("maitycoon.admin")) return false;
         player.sendActionBar(Component.text(ownerName(owner(block)) + "의 땅은 보호되어 있습니다.", NamedTextColor.RED));

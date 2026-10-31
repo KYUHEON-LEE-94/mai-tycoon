@@ -23,12 +23,12 @@ final class Shop implements Listener {
     }
     record Listing(long price, String category) {}
     /** What a sale would do right now; two quotes are equal only if prices and contents both match. */
-    private record Quote(long revision, Map<Material, Long> counts, long total) {
+    private record Quote(long revision, Map<String, Long> counts, long total) {
         long count() { return counts.values().stream().mapToLong(Long::longValue).sum(); }
     }
     private static final class Holder implements InventoryHolder {
         private final Kind kind;
-        private List<Material> page = List.of();
+        private List<String> page = List.of();
         private List<String> tabs = List.of();
         private String tab = ALL;
         private int pageIndex, amountIndex;
@@ -40,11 +40,11 @@ final class Shop implements Listener {
     }
     private static final class Confirm implements InventoryHolder {
         private final Holder shop;
-        private final Material only;
+        private final String only;
         private Quote quote;
         private boolean changed;
         private Inventory inventory;
-        private Confirm(Holder shop, Material only, Quote quote) {
+        private Confirm(Holder shop, String only, Quote quote) {
             this.shop = shop;
             this.only = only;
             this.quote = quote;
@@ -59,13 +59,15 @@ final class Shop implements Listener {
     private final MaiTycoonPlugin plugin;
     private final Market market;
     private final ProfileStore store;
-    private final Map<Material, String> crops;
-    private final Map<Material, Listing> seeds;
+    private final Map<String, String> crops;
+    private final Map<String, Listing> seeds;
+    private final Catalog catalog;
     private final Set<UUID> packReady = new HashSet<>();
-    Shop(MaiTycoonPlugin plugin, Market market, ProfileStore store, Map<Material, String> crops, Map<Material, Listing> seeds) {
+    Shop(MaiTycoonPlugin plugin, Market market, ProfileStore store, Catalog catalog, Map<String, String> crops, Map<String, Listing> seeds) {
         this.plugin = plugin;
         this.market = market;
         this.store = store;
+        this.catalog = catalog;
         this.crops = crops;
         this.seeds = seeds;
         for (Kind kind : Kind.values()) {
@@ -111,13 +113,13 @@ final class Shop implements Listener {
         for (String category : all) if (!tabs.contains(category)) tabs.add(category);
         return tabs;
     }
-    private String category(Kind kind, Material item) { return kind == Kind.SELL ? crops.get(item) : seeds.get(item).category(); }
-    private List<Material> listed(Holder holder) {
+    private String category(Kind kind, String item) { return kind == Kind.SELL ? crops.get(item) : seeds.get(item).category(); }
+    private List<String> listed(Holder holder) {
         return (holder.kind == Kind.SELL ? crops.keySet() : seeds.keySet()).stream()
             .filter(item -> holder.tab.equals(ALL) || holder.tab.equals(category(holder.kind, item))).toList();
     }
     private void render(Holder holder, Player player) throws IOException {
-        List<Material> listed = listed(holder);
+        List<String> listed = listed(holder);
         int pages = Math.max(1, (listed.size() + ShopLayout.PAGE_SIZE - 1) / ShopLayout.PAGE_SIZE);
         holder.pageIndex = Math.min(holder.pageIndex, pages - 1);
         int skip = holder.pageIndex * ShopLayout.PAGE_SIZE;
@@ -129,7 +131,7 @@ final class Shop implements Listener {
         inventory.clear();
         if (!drawn) Ui.frame(inventory);
         for (int i = 0; i < holder.page.size(); i++) {
-            Material item = holder.page.get(i);
+            String item = holder.page.get(i);
             inventory.setItem(ShopLayout.itemSlot(i), holder.kind == Kind.SELL ? sellIcon(item, player, holder) : buyIcon(item, holder));
             if (!drawn) inventory.setItem(ShopLayout.priceSlot(i), priceIcon(holder.kind, item));
         }
@@ -144,8 +146,8 @@ final class Shop implements Listener {
         int selected = holder.tabs.indexOf(holder.tab);
         if (selected >= 0) title.selectedTab(selected);
         for (int i = 0; i < holder.page.size(); i++) {
-            Material item = holder.page.get(i);
-            title.product(i, item.name(), holder.kind == Kind.SELL ? market.price(item.name()) : seeds.get(item).price(), Ui.count(player, item));
+            String item = holder.page.get(i);
+            title.product(i, item, holder.kind == Kind.SELL ? market.price(item) : seeds.get(item).price(), catalog.count(player, item));
         }
         return title.coins(coins).amount(AMOUNTS[holder.amountIndex]).page(holder.pageIndex + 1, pages).timer(java.time.LocalTime.now().plusSeconds(plugin.secondsToNextMarket())).build();
     }
@@ -153,7 +155,7 @@ final class Shop implements Listener {
         Inventory inventory = holder.inventory;
         for (int i = 0; i < holder.tabs.size(); i++) {
             String tab = holder.tabs.get(i);
-            ItemStack icon = Ui.icon(i == 0 ? Material.CHEST : tabIcon(holder.kind, tab), Ui.line(tab, NamedTextColor.WHITE), List.of());
+            ItemStack icon = Ui.decorate(i == 0 ? new ItemStack(Material.CHEST) : tabIcon(holder.kind, tab), Ui.line(tab, NamedTextColor.WHITE), List.of());
             inventory.setItem(ShopLayout.tabSlot(i), tab.equals(holder.tab) ? Ui.glow(icon) : icon);
         }
         ItemStack amount = Ui.icon(Material.HOPPER, Ui.line("거래 수량: " + AMOUNTS[holder.amountIndex] + "개", NamedTextColor.AQUA), List.of(Ui.line("클릭하면 수량이 바뀝니다.", NamedTextColor.GRAY)));
@@ -165,15 +167,15 @@ final class Shop implements Listener {
         if (holder.pageIndex > 0) inventory.setItem(ShopLayout.PREV, Ui.icon(Material.ARROW, Ui.line("이전 페이지", NamedTextColor.WHITE), List.of()));
         if (holder.pageIndex < pages - 1) inventory.setItem(ShopLayout.NEXT, Ui.icon(Material.ARROW, Ui.line("다음 페이지", NamedTextColor.WHITE), List.of()));
     }
-    private Material tabIcon(Kind kind, String tab) {
+    private ItemStack tabIcon(Kind kind, String tab) {
         return (kind == Kind.SELL ? crops.keySet() : seeds.keySet()).stream()
-            .filter(item -> tab.equals(category(kind, item))).findFirst().orElse(Material.CHEST);
+            .filter(item -> tab.equals(category(kind, item))).findFirst().map(item -> catalog.item(item, 1)).orElse(new ItemStack(Material.CHEST));
     }
-    private ItemStack priceIcon(Kind kind, Material item) {
+    private ItemStack priceIcon(Kind kind, String item) {
         if (kind == Kind.BUY) return Ui.icon(Material.GOLD_NUGGET, Ui.line(seeds.get(item).price() + " YD", NamedTextColor.YELLOW), List.of());
-        long change = market.change(item.name());
+        long change = market.change(item);
         String trend = change > 0 ? " ▲" + change : change < 0 ? " ▼" + -change : "";
-        return Ui.icon(Material.GOLD_NUGGET, Ui.line(market.price(item.name()) + " YD" + trend, NamedTextColor.YELLOW), List.of());
+        return Ui.icon(Material.GOLD_NUGGET, Ui.line(market.price(item) + " YD" + trend, NamedTextColor.YELLOW), List.of());
     }
     private String graph(String id) {
         StringBuilder graph = new StringBuilder();
@@ -181,34 +183,34 @@ final class Shop implements Listener {
         for (int percent : market.trail(id)) graph.append(BARS[(percent - market.minPercent()) * (BARS.length - 1) / range]);
         return graph.toString();
     }
-    private ItemStack sellIcon(Material item, Player player, Holder holder) {
-        String id = item.name();
+    private ItemStack sellIcon(String id, Player player, Holder holder) {
         long change = market.change(id);
         Component trend = change > 0 ? Ui.line("▲ " + change, NamedTextColor.RED) : change < 0 ? Ui.line("▼ " + -change, NamedTextColor.BLUE) : Ui.line("-", NamedTextColor.GRAY);
-        return Ui.icon(item, Ui.name(item, NamedTextColor.WHITE), List.of(
+        return Ui.decorate(catalog.item(id, 1), catalog.name(id).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
             Ui.line("현재 " + market.price(id) + " YD  ", NamedTextColor.YELLOW).append(trend),
             Ui.line("시세 " + graph(id), NamedTextColor.GREEN),
             Ui.line("범위 " + market.floor(id) + " ~ " + market.ceiling(id) + " YD", NamedTextColor.GRAY),
             Ui.line("다음 시세까지 약 " + plugin.secondsToNextMarket() / 60 + "분", NamedTextColor.GRAY),
-            Ui.line("보유 " + Ui.count(player, item) + "개", NamedTextColor.GRAY),
+            Ui.line("보유 " + catalog.count(player, id) + "개", NamedTextColor.GRAY),
             Ui.line("좌클릭 " + AMOUNTS[holder.amountIndex] + "개 판매 / 우클릭 전부 판매", NamedTextColor.GREEN)));
     }
-    private ItemStack buyIcon(Material item, Holder holder) {
-        return Ui.icon(item, Ui.name(item, NamedTextColor.WHITE), List.of(
+    private ItemStack buyIcon(String item, Holder holder) {
+        return Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
             Ui.line("개당 " + seeds.get(item).price() + " YD", NamedTextColor.YELLOW),
-            Ui.line("좌클릭 " + buyAmount(item, AMOUNTS[holder.amountIndex]) + "개 구매 / 우클릭 " + item.getMaxStackSize() + "개 구매", NamedTextColor.GREEN)));
+            Ui.line("좌클릭 " + buyAmount(item, AMOUNTS[holder.amountIndex]) + "개 구매 / 우클릭 " + catalog.maxStack(item) + "개 구매", NamedTextColor.GREEN)));
     }
-    private static int buyAmount(Material item, int wanted) { return Math.min(wanted, item.getMaxStackSize()); }
+    private int buyAmount(String item, int wanted) { return Math.min(wanted, catalog.maxStack(item)); }
     /** only == null covers every listed crop. Off-hand and named items stay untouched. */
-    private Quote quote(Player player, Material only, long limit) {
-        Map<Material, Long> counts = new LinkedHashMap<>();
+    private Quote quote(Player player, String only, long limit) {
+        Map<String, Long> counts = new LinkedHashMap<>();
         long total = 0, count = 0;
         for (ItemStack item : player.getInventory().getStorageContents()) {
             if (count >= limit) break;
-            if (!Ui.plain(item) || !market.has(item.getType().name()) || (only != null && item.getType() != only)) continue;
+            String id = catalog.idOf(item);
+            if (id == null || !market.has(id) || (only != null && !id.equals(only))) continue;
             long amount = Math.min(item.getAmount(), limit - count);
-            total = Math.addExact(total, Math.multiplyExact(market.price(item.getType().name()), amount));
-            counts.merge(item.getType(), amount, Long::sum);
+            total = Math.addExact(total, Math.multiplyExact(market.price(id), amount));
+            counts.merge(id, amount, Long::sum);
             count += amount;
         }
         return new Quote(market.revision(), counts, total);
@@ -219,19 +221,19 @@ final class Shop implements Listener {
             store.save(id, store.load(id).sell(quote.total()));
             take(player, quote.counts());
         });
-        Component what = quote.counts().size() == 1 ? Component.translatable(quote.counts().keySet().iterator().next()) : Component.text("작물");
+        Component what = quote.counts().size() == 1 ? catalog.name(quote.counts().keySet().iterator().next()) : Component.text("작물");
         plugin.tell(player, what.append(Component.text(" " + quote.count() + "개를 판매했습니다. +" + money(quote.total()) + " YD · 잔액 " + money(store.load(id).coins()) + " YD")));
     }
-    private static void take(Player player, Map<Material, Long> counts) {
-        Map<Material, Long> left = new HashMap<>(counts);
+    private void take(Player player, Map<String, Long> counts) {
+        Map<String, Long> left = new HashMap<>(counts);
         ItemStack[] contents = player.getInventory().getStorageContents();
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack item = contents[slot];
-            if (!Ui.plain(item)) continue;
-            long wanted = left.getOrDefault(item.getType(), 0L);
+            String id = catalog.idOf(item);
+            long wanted = id == null ? 0 : left.getOrDefault(id, 0L);
             if (wanted == 0) continue;
             int amount = (int) Math.min(wanted, item.getAmount());
-            left.put(item.getType(), wanted - amount);
+            left.put(id, wanted - amount);
             Ui.take(player, slot, amount);
         }
     }
@@ -242,13 +244,13 @@ final class Shop implements Listener {
         plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요.");
         return false;
     }
-    private void sellNow(Player player, Material item, long limit) throws IOException {
+    private void sellNow(Player player, String item, long limit) throws IOException {
         if (!mayTrade(player)) return;
         Quote quote = quote(player, item, limit);
         if (quote.count() == 0) plugin.tell(player, "판매할 일반 작물이 없습니다.");
         else execute(player, quote);
     }
-    private void openConfirm(Holder shop, Player player, Material only) throws IOException {
+    private void openConfirm(Holder shop, Player player, String only) throws IOException {
         if (!mayTrade(player)) return;
         Quote quote = quote(player, only, Long.MAX_VALUE);
         if (quote.count() == 0) { plugin.tell(player, "판매할 일반 작물이 없습니다."); return; }
@@ -265,17 +267,17 @@ final class Shop implements Listener {
         List<Component> lore = new ArrayList<>(List.of(Ui.line("현재 잔액 " + money(coins) + " YD", NamedTextColor.GRAY), Ui.line("판매 후 잔액 " + money(coins + quote.total()) + " YD", NamedTextColor.GOLD)));
         if (confirm.changed) lore.add(Ui.line("시세나 인벤토리가 바뀌어 다시 계산했습니다.", NamedTextColor.RED));
         inventory.setItem(CONFIRM_TARGET, Ui.icon(Material.GOLD_INGOT, Ui.line("합계 " + money(quote.total()) + " YD · " + quote.count() + "개", NamedTextColor.YELLOW), lore));
-        List<Material> items = List.copyOf(quote.counts().keySet());
+        List<String> items = List.copyOf(quote.counts().keySet());
         for (int i = 0; i < items.size() && i < CONFIRM_LINES.size(); i++) {
-            Material item = items.get(i);
+            String item = items.get(i);
             long count = quote.counts().get(item);
-            inventory.setItem(CONFIRM_LINES.get(i), Ui.icon(item, Ui.name(item, NamedTextColor.WHITE),
-                List.of(Ui.line(count + "개 × " + market.price(item.name()) + " YD = " + money(count * market.price(item.name())) + " YD", NamedTextColor.GRAY))));
+            inventory.setItem(CONFIRM_LINES.get(i), Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
+                List.of(Ui.line(count + "개 × " + market.price(item) + " YD = " + money(count * market.price(item)) + " YD", NamedTextColor.GRAY))));
         }
         if (items.size() > CONFIRM_LINES.size()) {
             List<Component> rest = new ArrayList<>();
-            for (Material item : items.subList(CONFIRM_LINES.size() - 1, items.size())) {
-                rest.add(Ui.name(item, NamedTextColor.GRAY).append(Ui.line(" " + quote.counts().get(item) + "개", NamedTextColor.GRAY)));
+            for (String item : items.subList(CONFIRM_LINES.size() - 1, items.size())) {
+                rest.add(catalog.name(item).color(NamedTextColor.GRAY).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false).append(Ui.line(" " + quote.counts().get(item) + "개", NamedTextColor.GRAY)));
             }
             inventory.setItem(CONFIRM_LINES.get(CONFIRM_LINES.size() - 1), Ui.icon(Material.CHEST, Ui.line("그 외 " + rest.size() + "종", NamedTextColor.WHITE), rest));
         }
@@ -298,25 +300,25 @@ final class Shop implements Listener {
         plugin.tell(player, "시세가 바뀌어 합계를 다시 계산했습니다. 금액을 확인해 주세요.");
         return false;
     }
-    private void buy(Player player, Material item, int amount) throws IOException {
+    private void buy(Player player, String item, int amount) throws IOException {
         if (!mayTrade(player)) return;
         long cost = Math.multiplyExact(seeds.get(item).price(), amount);
         var id = player.getUniqueId();
         Profile profile = store.load(id);
         if (profile.coins() < cost) { plugin.tell(player, "YD가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
         if (freeSpace(player, item) < amount) {
-            plugin.tell(player, Component.translatable(item).append(Component.text(" " + amount + "개를 넣을 공간이 부족합니다.")));
+            plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 넣을 공간이 부족합니다.")));
             return;
         }
         plugin.transact(player, "buy", item + " x" + amount + " -" + cost, () -> {
             store.save(id, profile.spend(cost));
-            player.getInventory().addItem(new ItemStack(item, amount));
+            player.getInventory().addItem(catalog.item(item, amount));
         });
-        plugin.tell(player, Component.translatable(item).append(Component.text(" " + amount + "개를 구매했습니다. -" + money(cost) + " YD · 잔액 " + money(profile.coins() - cost) + " YD")));
+        plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 구매했습니다. -" + money(cost) + " YD · 잔액 " + money(profile.coins() - cost) + " YD")));
     }
-    private static int freeSpace(Player player, Material item) {
-        int free = 0, stack = item.getMaxStackSize();
-        ItemStack sample = new ItemStack(item);
+    private int freeSpace(Player player, String item) {
+        int free = 0, stack = catalog.maxStack(item);
+        ItemStack sample = catalog.item(item, 1);
         for (ItemStack slot : player.getInventory().getStorageContents()) {
             if (slot == null || slot.getType().isAir()) free += stack;
             else if (slot.isSimilar(sample)) free += Math.max(0, stack - slot.getAmount());
@@ -336,7 +338,7 @@ final class Shop implements Listener {
         if (slot >= ShopLayout.SIZE) return;
         plugin.guarded(player, () -> {
             int tab = ShopLayout.tabAt(slot), index = ShopLayout.itemAt(slot);
-            Material item = index >= 0 && index < holder.page.size() ? holder.page.get(index) : null;
+            String item = index >= 0 && index < holder.page.size() ? holder.page.get(index) : null;
             if (tab >= 0) {
                 if (tab >= holder.tabs.size()) return;
                 holder.tab = holder.tabs.get(tab);
@@ -350,7 +352,7 @@ final class Shop implements Listener {
                 return;
             }
             else if (item == null) return;
-            else if (holder.kind == Kind.BUY) buy(player, item, click == ClickType.LEFT ? buyAmount(item, AMOUNTS[holder.amountIndex]) : item.getMaxStackSize());
+            else if (holder.kind == Kind.BUY) buy(player, item, click == ClickType.LEFT ? buyAmount(item, AMOUNTS[holder.amountIndex]) : catalog.maxStack(item));
             else if (click == ClickType.LEFT) sellNow(player, item, AMOUNTS[holder.amountIndex]);
             else { openConfirm(holder, player, item); return; }
             render(holder, player);

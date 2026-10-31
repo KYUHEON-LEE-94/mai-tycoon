@@ -25,9 +25,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private DexMenu dexMenu;
     private Lands lands;
     private ResourcePack resourcePack;
+    private Catalog catalog;
+    private CustomCrops customCrops;
     private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
     private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land");
+    private static final String CUSTOM_CATEGORY = "특산물";
     private static final List<String> ADMIN_ACTIONS = List.of("market", "journal");
     @Override public void onEnable() {
         saveDefaultConfig();
@@ -37,13 +40,14 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             for (var entry : journal.interrupted()) {
                 getLogger().warning("Interrupted trade " + entry.id() + " for " + entry.player() + " at " + entry.createdAt() + ": " + entry.type() + " " + entry.detail());
             }
+            catalog = new Catalog(this, getConfig().getConfigurationSection("custom-crops.crops"));
             market = loadMarket();
             restoreMarket();
-            Map<Material, String> crops = loadCrops();
-            Map<Material, Shop.Listing> seeds = loadSeeds();
+            Map<String, String> crops = loadCrops();
+            Map<String, Shop.Listing> seeds = loadSeeds();
             marketInterval = getConfig().getInt("market.interval-minutes") * 60_000L;
             if (marketInterval < 60_000) throw new IOException("Invalid market interval");
-            shop = new Shop(this, market, store, crops, seeds);
+            shop = new Shop(this, market, store, catalog, crops, seeds);
             dexMenu = new DexMenu(this, loadDex(), store);
             Map<String, Consumer<Player>> npcActions = new HashMap<>();
             village = new Village(this, npcActions);
@@ -63,6 +67,11 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(village, this);
             getServer().getPluginManager().registerEvents(dexMenu, this);
             getServer().getPluginManager().registerEvents(lands, this);
+            int cropLimit = getConfig().getInt("custom-crops.chunk-limit");
+            if (cropLimit < 1) throw new IOException("Invalid custom crop limit");
+            customCrops = new CustomCrops(this, catalog, village, lands, cropLimit);
+            getServer().getPluginManager().registerEvents(customCrops, this);
+            village.onShowcase(customCrops::plantShowcase);
             try {
                 resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
                 getServer().getPluginManager().registerEvents(resourcePack, this);
@@ -73,8 +82,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             nextMarketChange = System.currentTimeMillis() + marketInterval;
             long ticks = marketInterval / 50;
             getServer().getScheduler().runTaskTimer(this, this::refreshPrices, ticks, ticks);
+            getServer().getScheduler().runTaskTimer(this, () -> village.lookAtPlayers(), 20L, 10L);
             getServer().getScheduler().runTask(this, () -> {
-                if (village.built()) { getServer().setSpawnRadius(0); village.ensureNpcs(); }
+                customCrops.start();
+                if (village.built()) { getServer().setSpawnRadius(0); village.upgradeStructures(); village.ensureNpcs(); }
                 else if (getConfig().getBoolean("village.auto-build")) village.build(() -> {});
                 else getLogger().info("No village yet. /tycoon village build confirm flattens the area around the world spawn and builds it.");
             });
@@ -93,12 +104,14 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             if (crop == null || !crop.isItem() || !crop.name().equals(id)) throw new IOException("Invalid crop " + id);
             rules.put(id, new Market.Rule(section.getLong(id + ".base", -1), section.getInt(id + ".swing", -1)));
         }
+        for (Catalog.Crop crop : catalog.crops()) rules.put(crop.id(), new Market.Rule(crop.base(), crop.swing()));
         return new Market(rules, getConfig().getInt("market.min-percent"), getConfig().getInt("market.max-percent"));
     }
-    private Map<Material, String> loadCrops() {
+    private Map<String, String> loadCrops() {
         var section = Objects.requireNonNull(getConfig().getConfigurationSection("crops"));
-        Map<Material, String> crops = new LinkedHashMap<>();
-        for (String id : section.getKeys(false)) crops.put(Material.valueOf(id), section.getString(id + ".category", "기타"));
+        Map<String, String> crops = new LinkedHashMap<>();
+        for (String id : section.getKeys(false)) crops.put(id, section.getString(id + ".category", "기타"));
+        for (Catalog.Crop crop : catalog.crops()) crops.put(crop.id(), CUSTOM_CATEGORY);
         return crops;
     }
     private Dex loadDex() throws IOException {
@@ -118,17 +131,21 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         return new Dex(pages, rewards);
     }
-    private Map<Material, Shop.Listing> loadSeeds() throws IOException {
+    private Map<String, Shop.Listing> loadSeeds() throws IOException {
         var section = getConfig().getConfigurationSection("seeds");
         if (section == null) throw new IOException("Missing seeds");
-        Map<Material, Shop.Listing> seeds = new LinkedHashMap<>();
+        Map<String, Shop.Listing> seeds = new LinkedHashMap<>();
         for (String id : section.getKeys(false)) {
             Material item = Material.matchMaterial(id);
             long price = section.getLong(id + ".price", -1);
             if (item == null || !item.isItem() || price < 1 || price > 1_000_000) throw new IOException("Invalid seed price for " + id);
             // Buying must never undercut the best selling price, or YD could be minted by trading back and forth.
             if (market.has(id) && price <= market.ceiling(id)) throw new IOException("Seed price must exceed top market price: " + id);
-            seeds.put(item, new Shop.Listing(price, section.getString(id + ".category", "기타")));
+            seeds.put(id, new Shop.Listing(price, section.getString(id + ".category", "기타")));
+        }
+        for (Catalog.Crop crop : catalog.crops()) {
+            if (crop.seedPrice() < 1) throw new IOException("Invalid seed price for " + crop.id());
+            seeds.put(crop.seedId(), new Shop.Listing(crop.seedPrice(), CUSTOM_CATEGORY));
         }
         return seeds;
     }
@@ -165,8 +182,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         Component news = Component.text("시세 변동! ").append(moveText(up, NamedTextColor.RED)).append(Component.text(" / ")).append(moveText(down, NamedTextColor.BLUE));
         for (Player player : getServer().getOnlinePlayers()) tell(player, news);
     }
-    private static Component moveText(Market.Move move, NamedTextColor color) {
-        return Component.translatable(Material.valueOf(move.id())).color(color)
+    private Component moveText(Market.Move move, NamedTextColor color) {
+        return catalog.name(move.id()).color(color)
             .append(Component.text(" " + move.price() + " YD (" + (move.change() >= 0 ? "+" : "") + move.change() + ")", color));
     }
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -254,7 +271,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         for (String id : market.ids()) {
             long change = market.change(id);
             String trend = change > 0 ? " ▲" + change : change < 0 ? " ▼" + -change : "";
-            player.sendMessage(Component.text(" · ").append(Component.translatable(Material.valueOf(id))).append(Component.text(" " + market.price(id) + " YD" + trend)));
+            player.sendMessage(Component.text(" · ").append(catalog.name(id)).append(Component.text(" " + market.price(id) + " YD" + trend)));
         }
     }
     boolean survival(Player player) {

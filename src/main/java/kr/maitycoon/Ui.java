@@ -21,6 +21,13 @@ final class Ui {
         icon.setItemMeta(meta);
         return icon;
     }
+    static ItemStack decorate(ItemStack icon, Component name, List<Component> lore) {
+        var meta = icon.getItemMeta();
+        if (name != null) meta.displayName(name);
+        meta.lore(lore);
+        icon.setItemMeta(meta);
+        return icon;
+    }
     static ItemStack glow(ItemStack icon) {
         var meta = icon.getItemMeta();
         meta.setEnchantmentGlintOverride(true);

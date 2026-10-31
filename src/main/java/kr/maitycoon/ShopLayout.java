@@ -9,8 +9,8 @@ public final class ShopLayout {
     public static final int GUI_WIDTH=176, GUI_HEIGHT=128, SLOT=18, LEFT=8, TOP=18, FOOTER_ROW=5;
     public static final int BACKGROUND_HEIGHT=222, TILE_WIDTH=44, TILE_HEIGHT=32, TILE_COLUMNS=4, TILE_ROWS=7;
     public static final Set<Integer> AMOUNT=Set.of(46,47), ACTION=Set.of(41,42,43,44);
-    public static final List<String> ITEM_IDS=List.of("WHEAT","CARROT","POTATO","BEETROOT","PUMPKIN","MELON_SLICE","SWEET_BERRIES","GLOW_BERRIES","COCOA_BEANS","SUGAR_CANE","CACTUS","BAMBOO","KELP","BROWN_MUSHROOM","RED_MUSHROOM","NETHER_WART","TORCHFLOWER","PITCHER_PLANT","WHEAT_SEEDS","BEETROOT_SEEDS","MELON_SEEDS","PUMPKIN_SEEDS","TORCHFLOWER_SEEDS","PITCHER_POD","BONE_MEAL","STONE_HOE","IRON_HOE");
-    public static final List<String> ITEM_NAMES=List.of("밀","당근","감자","비트","호박","수박 조각","달콤한 열매","발광 열매","코코아 콩","사탕수수","선인장","대나무","켈프","갈색 버섯","빨간색 버섯","네더 사마귀","횃불꽃","벌레잡이풀","밀 씨앗","비트 씨앗","수박씨","호박씨","횃불꽃 씨앗","벌레잡이풀 꼬투리","뼛가루","돌 괭이","철 괭이");
+    public static final List<String> ITEM_IDS=List.of("WHEAT","CARROT","POTATO","BEETROOT","PUMPKIN","MELON_SLICE","SWEET_BERRIES","GLOW_BERRIES","COCOA_BEANS","SUGAR_CANE","CACTUS","BAMBOO","KELP","BROWN_MUSHROOM","RED_MUSHROOM","NETHER_WART","TORCHFLOWER","PITCHER_PLANT","WHEAT_SEEDS","BEETROOT_SEEDS","MELON_SEEDS","PUMPKIN_SEEDS","TORCHFLOWER_SEEDS","PITCHER_POD","BONE_MEAL","STONE_HOE","IRON_HOE","CABBAGE","PINEAPPLE","GRAPE","TOMATO","CORN","STRAWBERRY","CABBAGE_SEEDS","PINEAPPLE_SEEDS","GRAPE_SEEDS","TOMATO_SEEDS","CORN_SEEDS","STRAWBERRY_SEEDS");
+    public static final List<String> ITEM_NAMES=List.of("밀","당근","감자","비트","호박","수박 조각","달콤한 열매","발광 열매","코코아 콩","사탕수수","선인장","대나무","켈프","갈색 버섯","빨간색 버섯","네더 사마귀","횃불꽃","벌레잡이풀","밀 씨앗","비트 씨앗","수박씨","호박씨","횃불꽃 씨앗","벌레잡이풀 꼬투리","뼛가루","돌 괭이","철 괭이","배추","파인애플","포도","토마토","옥수수","딸기","배추 씨앗","파인애플 모종","포도 묘목","토마토 씨앗","옥수수 씨앗","딸기 모종");
     private ShopLayout() {}
     public static int tabSlot(int tab){return 36+tab;}
     public static int tabAt(int slot){return slot>=36&&slot<=40?slot-36:-1;}

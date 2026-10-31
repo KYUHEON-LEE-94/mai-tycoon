@@ -28,7 +28,7 @@ final class ShopTitle {
     }
     ShopTitle selectedTab(int tab){moveTo(7+tab*18);put(GUI,"\ue210",NamedTextColor.WHITE,19);return this;}
     private static String compact(long n){return n>=1_000_000_000L?n/1_000_000_000L+"B":n>=1_000_000L?n/1_000_000L+"M":n>=10_000?n/1000+"K":Long.toString(n);}
-    ShopTitle coins(long n){number("footer",15,compact(n));return this;}
+    ShopTitle coins(long n){number("footer",15,compact(n)+"YD");return this;}
     ShopTitle amount(int n){number("controls",41,Integer.toString(n));return this;}
     ShopTitle page(int page,int total){number("controls",82,page+"/"+total);return this;}
     /** Clock time of the next price change: the title only redraws on a click, so a countdown would freeze. */
@@ -37,7 +37,7 @@ final class ShopTitle {
         int row=ShopLayout.row(index),x=ShopLayout.slotX(ShopLayout.itemColumn(index));
         int name=ShopLayout.ITEM_IDS.indexOf(id);
         if(name>=0){moveTo(x+20);put(Key.key("maitycoon","names"+row),String.valueOf((char)(0xE500+name)),NamedTextColor.WHITE,49);}
-        number("row"+row,x+46,compact(price));number("owned"+row,x,compact(owned));return this;
+        number("row"+row,x+56,compact(price));number("owned"+row,x,compact(owned));return this;
     }
     Component build(){return title.build();}
 }

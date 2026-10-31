@@ -6,6 +6,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.logging.Level;
+import io.papermc.paper.datacomponent.item.ResolvableProfile;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
@@ -24,20 +26,24 @@ final class Village implements Listener {
     record Zone(int x1, int z1, int x2, int z2) {
         boolean contains(int dx, int dz) { return dx >= x1 && dx <= x2 && dz >= z1 && dz <= z2; }
     }
-    private record Npc(String id, int dx, int dz, float yaw, String name, Villager.Profession profession) {}
+    /** skin is a vanilla default skin path the resource pack repaints, so players without the pack still see a normal person. */
+    private record Npc(String id, int dx, int dz, float yaw, String name, String skin) {}
     private static final List<Npc> NPCS = List.of(
-        new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, 0f, "작물 상인", Villager.Profession.FARMER),
-        new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, 0f, "씨앗 상인", Villager.Profession.FLETCHER),
-        new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", Villager.Profession.LIBRARIAN),
-        // Not a cartographer: saving a villager can generate its trades, and map trades search for
-        // structures, which fails during chunk unload and loses the entity.
-        new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", Villager.Profession.MASON));
+        new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, 0f, "작물 상인", "kai"),
+        new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, 0f, "씨앗 상인", "makena"),
+        new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", "efe"),
+        new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", "zuri"));
+    private record Sign(int dx, double dy, double dz, String text) {}
+    private static final List<Sign> SIGNS = List.of(
+        new Sign(VillageBuilder.MARKET_STALL_X, 7.6, VillageBuilder.STALL_FRONT + 1.6, "농산물 상점"),
+        new Sign(VillageBuilder.SEED_STALL_X, 7.6, VillageBuilder.STALL_FRONT + 1.6, "씨앗 상점"));
+    private static final int STRUCTURES = 3;
     static final Set<Material> FARMABLE = EnumSet.of(Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
         Material.MELON, Material.PUMPKIN, Material.MELON_STEM, Material.PUMPKIN_STEM, Material.ATTACHED_MELON_STEM, Material.ATTACHED_PUMPKIN_STEM,
         Material.SUGAR_CANE, Material.CACTUS, Material.BAMBOO, Material.BAMBOO_SAPLING, Material.COCOA, Material.SWEET_BERRY_BUSH,
         Material.CAVE_VINES, Material.CAVE_VINES_PLANT, Material.NETHER_WART, Material.KELP, Material.KELP_PLANT,
         Material.TORCHFLOWER_CROP, Material.TORCHFLOWER, Material.PITCHER_CROP, Material.PITCHER_PLANT,
-        Material.BROWN_MUSHROOM, Material.RED_MUSHROOM, Material.SHORT_GRASS, Material.FARMLAND);
+        Material.BROWN_MUSHROOM, Material.RED_MUSHROOM, Material.SHORT_GRASS, Material.FARMLAND, Material.TRIPWIRE);
     private final MaiTycoonPlugin plugin;
     private final File file;
     private final NamespacedKey npcKey;
@@ -45,6 +51,8 @@ final class Village implements Listener {
     private String worldName;
     private int x, y, z;
     private boolean built, building;
+    private int structures;
+    private Consumer<List<Block>> showcase = soil -> {};
     /** npcActions is keyed by NPC id and may be filled after construction. */
     Village(MaiTycoonPlugin plugin, Map<String, Consumer<Player>> npcActions) throws IOException {
         this.plugin = plugin;
@@ -60,8 +68,10 @@ final class Village implements Listener {
         y = yaml.getInt("y");
         z = yaml.getInt("z");
         built = yaml.getBoolean("built");
+        structures = yaml.getInt("structures", 1);
     }
     boolean built() { return built; }
+    void onShowcase(Consumer<List<Block>> planter) { showcase = planter; }
     World world() { return worldName == null ? null : plugin.getServer().getWorld(worldName); }
     /** True when the chunk touches the town or its terrain slope. */
     boolean overlaps(World world, int chunkX, int chunkZ) {
@@ -115,39 +125,94 @@ final class Village implements Listener {
         plugin.getServer().setSpawnRadius(0);
         built = true;
         building = false;
+        structures = STRUCTURES;
+        saveState();
+        ensureNpcs();
+        showcase.accept(new VillageBuilder(world, x, z, y).showcaseSoil());
+        for (Player player : world.getPlayers()) if (inside(player.getLocation())) player.teleport(spawn);
+        plugin.getLogger().info("Village ready");
+    }
+    private void saveState() {
         var yaml = new YamlConfiguration();
         yaml.set("world", worldName);
         yaml.set("x", x);
         yaml.set("y", y);
         yaml.set("z", z);
         yaml.set("built", true);
+        yaml.set("structures", structures);
         try { yaml.save(file); }
         catch (IOException e) { plugin.getLogger().log(Level.SEVERE, "Cannot save village.yml", e); }
-        ensureNpcs();
-        for (Player player : world.getPlayers()) if (inside(player.getLocation())) player.teleport(spawn);
-        plugin.getLogger().info("Village ready");
+    }
+    /** Rebuilds only the buildings of a village made by an older version; terrain and players' crops stay as they are. */
+    void upgradeStructures() {
+        World world = world();
+        if (world == null || structures >= STRUCTURES) return;
+        var builder = new VillageBuilder(world, x, z, y);
+        builder.shops();
+        builder.buildings();
+        structures = STRUCTURES;
+        saveState();
+        showcase.accept(builder.showcaseSoil());
+        plugin.getLogger().info("Village buildings rebuilt");
+    }
+    /** NPCs turn toward a nearby player, like someone waiting at a counter. */
+    void lookAtPlayers() {
+        World world = world();
+        if (world == null || world.getPlayers().isEmpty()) return;
+        for (Npc npc : NPCS) {
+            Location at = new Location(world, x + npc.dx() + 0.5, y + 1, z + npc.dz() + 0.5);
+            if (!at.isChunkLoaded()) continue;
+            Player nearest = world.getNearbyPlayers(at, 7).stream().min(Comparator.comparingDouble(player -> player.getLocation().distanceSquared(at))).orElse(null);
+            for (Entity entity : world.getNearbyEntities(at, 0.4, 1, 0.4)) {
+                if (!npc.id().equals(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) continue;
+                Location eyes = entity.getLocation();
+                if (nearest == null) entity.setRotation(npc.yaw(), 0f);
+                else {
+                    eyes.setDirection(nearest.getEyeLocation().toVector().subtract(entity.getLocation().add(0, 1.6, 0).toVector()));
+                    entity.setRotation(eyes.getYaw(), eyes.getPitch());
+                }
+            }
+        }
+    }
+    private void showSigns(World world) {
+        for (Sign sign : SIGNS) {
+            Location at = new Location(world, x + sign.dx() + 0.5, y + sign.dy(), z + sign.dz(), 0f, 0f);
+            for (Entity entity : at.getChunk().getEntities()) {
+                if (("sign:" + sign.text()).equals(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) entity.remove();
+            }
+            world.spawn(at, TextDisplay.class, display -> {
+                display.text(Component.text(sign.text(), NamedTextColor.GOLD));
+                display.setBackgroundColor(Color.fromARGB(190, 40, 28, 18));
+                display.setTransformation(new org.bukkit.util.Transformation(new org.joml.Vector3f(), new org.joml.AxisAngle4f(), new org.joml.Vector3f(2.4f, 2.4f, 2.4f), new org.joml.AxisAngle4f()));
+                display.setPersistent(true);
+                display.getPersistentDataContainer().set(npcKey, PersistentDataType.STRING, "sign:" + sign.text());
+            });
+        }
     }
     /** Replaces every NPC so exactly one of each exists, whatever an older version or a lost save left behind. */
     void ensureNpcs() {
         World world = world();
         if (world == null) return;
+        showSigns(world);
         for (Npc npc : NPCS) {
             Location at = new Location(world, x + npc.dx() + 0.5, y + 1, z + npc.dz() + 0.5, npc.yaw(), 0f);
             for (Entity entity : at.getChunk().getEntities()) {
                 if (npc.id().equals(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) entity.remove();
             }
-            world.spawn(at, Villager.class, villager -> {
-                villager.setProfession(npc.profession());
-                villager.setVillagerLevel(5);
-                villager.customName(Component.text(npc.name(), NamedTextColor.GREEN));
-                villager.setCustomNameVisible(true);
-                villager.setAI(false);
-                villager.setInvulnerable(true);
-                villager.setSilent(true);
-                villager.setCollidable(false);
-                villager.setPersistent(true);
-                villager.setRemoveWhenFarAway(false);
-                villager.getPersistentDataContainer().set(npcKey, PersistentDataType.STRING, npc.id());
+            world.spawn(at, Mannequin.class, person -> {
+                person.setProfile(ResolvableProfile.resolvableProfile().name(npc.id()).skinPatch(skin -> skin.body(Key.key("minecraft", "entity/player/wide/" + npc.skin()))).build());
+                person.setImmovable(true);
+                person.setDescription(null);
+                person.customName(Component.text(npc.name(), NamedTextColor.YELLOW));
+                person.setCustomNameVisible(true);
+                person.setAI(false);
+                person.setGravity(false);
+                person.setInvulnerable(true);
+                person.setSilent(true);
+                person.setCollidable(false);
+                person.setPersistent(true);
+                person.setRemoveWhenFarAway(false);
+                person.getPersistentDataContainer().set(npcKey, PersistentDataType.STRING, npc.id());
             });
         }
     }
@@ -159,6 +224,11 @@ final class Village implements Listener {
     private boolean farm(Block block) {
         int dx = block.getX() - x, dz = block.getZ() - z;
         return VillageBuilder.FARMS.stream().anyMatch(zone -> zone.contains(dx, dz));
+    }
+    boolean allowsPlanting(Player player, Block block) {
+        if (!guarded(player, block) || farm(block)) return true;
+        refuse(player);
+        return false;
     }
     private boolean guarded(Player player, Block block) { return inside(block.getLocation()) && !player.hasPermission("maitycoon.admin"); }
     private void refuse(Player player) { player.sendActionBar(Component.text("마을은 보호 구역입니다. 농장에서만 작물을 심고 거둘 수 있습니다.", NamedTextColor.RED)); }
