@@ -56,7 +56,7 @@ final class DexMenu implements Listener {
             holder.entries.put(BODY_START + i, item);
             inventory.setItem(BODY_START + i, entry(item, profile, player));
         }
-        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " YD", NamedTextColor.GOLD), List.of(Ui.line("즈코인 " + profile.zcoin() + "개", NamedTextColor.AQUA))));
+        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " 골드", NamedTextColor.GOLD), List.of(Ui.line("즈코인 " + profile.zcoin() + "개", NamedTextColor.AQUA))));
         inventory.setItem(PROGRESS, progress(profile));
     }
     private ItemStack entry(Material item, Profile profile, Player player) {

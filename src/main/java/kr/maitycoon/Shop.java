@@ -142,7 +142,7 @@ final class Shop implements Listener {
         if (drawn) holder.title = drawnTitle(holder, coins, player, pages);
         else {
             plainControls(holder, pages);
-            holder.title = Component.text(holder.kind.title + " · " + String.format("%,d", coins) + " YD");
+            holder.title = Component.text(holder.kind.title + " · " + String.format("%,d", coins) + " 골드");
         }
     }
     private Component drawnTitle(Holder holder, long coins, Player player, int pages) {
@@ -176,10 +176,10 @@ final class Shop implements Listener {
             .filter(item -> tab.equals(category(kind, item))).findFirst().map(item -> catalog.item(item, 1)).orElse(new ItemStack(Material.CHEST));
     }
     private ItemStack priceIcon(Kind kind, String item) {
-        if (kind != Kind.SELL) return Ui.icon(Material.GOLD_NUGGET, Ui.line(stock(kind).get(item).price() + " YD", NamedTextColor.YELLOW), List.of());
+        if (kind != Kind.SELL) return Ui.icon(Material.GOLD_NUGGET, Ui.line(stock(kind).get(item).price() + " 골드", NamedTextColor.YELLOW), List.of());
         long change = market.change(item);
         String trend = change > 0 ? " ▲" + change : change < 0 ? " ▼" + -change : "";
-        return Ui.icon(Material.GOLD_NUGGET, Ui.line(market.price(item) + " YD" + trend, NamedTextColor.YELLOW), List.of());
+        return Ui.icon(Material.GOLD_NUGGET, Ui.line(market.price(item) + " 골드" + trend, NamedTextColor.YELLOW), List.of());
     }
     private String graph(String id) {
         StringBuilder graph = new StringBuilder();
@@ -191,9 +191,9 @@ final class Shop implements Listener {
         long change = market.change(id);
         Component trend = change > 0 ? Ui.line("▲ " + change, NamedTextColor.RED) : change < 0 ? Ui.line("▼ " + -change, NamedTextColor.BLUE) : Ui.line("-", NamedTextColor.GRAY);
         return Ui.decorate(catalog.item(id, 1), catalog.name(id).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
-            Ui.line("현재 " + market.price(id) + " YD  ", NamedTextColor.YELLOW).append(trend),
+            Ui.line("현재 " + market.price(id) + " 골드  ", NamedTextColor.YELLOW).append(trend),
             Ui.line("시세 " + graph(id), NamedTextColor.GREEN),
-            Ui.line("범위 " + market.floor(id) + " ~ " + market.ceiling(id) + " YD", NamedTextColor.GRAY),
+            Ui.line("범위 " + market.floor(id) + " ~ " + market.ceiling(id) + " 골드", NamedTextColor.GRAY),
             Ui.line("다음 시세까지 약 " + plugin.secondsToNextMarket() / 60 + "분", NamedTextColor.GRAY),
             Ui.line("보유 " + catalog.count(player, id) + "개", NamedTextColor.GRAY),
             Ui.line("이번 회차 서버 판매 " + market.sold(id) + "개 · 다음 하락 압력 " + market.pendingPressure(id) + "%", NamedTextColor.GOLD),
@@ -201,7 +201,7 @@ final class Shop implements Listener {
     }
     private ItemStack buyIcon(String item, Holder holder) {
         return Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
-            Ui.line("개당 " + stock(holder.kind).get(item).price() + " YD", NamedTextColor.YELLOW),
+            Ui.line("개당 " + stock(holder.kind).get(item).price() + " 골드", NamedTextColor.YELLOW),
             Ui.line("좌클릭 " + buyAmount(item, AMOUNTS[holder.amountIndex]) + "개 구매 / 우클릭 " + catalog.maxStack(item) + "개 구매", NamedTextColor.GREEN)));
     }
     private int buyAmount(String item, int wanted) { return Math.min(wanted, catalog.maxStack(item)); }
@@ -228,7 +228,7 @@ final class Shop implements Listener {
             plugin.recordMarketSales(quote.counts());
         });
         Component what = quote.counts().size() == 1 ? catalog.name(quote.counts().keySet().iterator().next()) : Component.text("작물");
-        plugin.tell(player, what.append(Component.text(" " + quote.count() + "개를 판매했습니다. +" + money(quote.total()) + " YD · 잔액 " + money(store.load(id).coins()) + " YD")));
+        plugin.tell(player, what.append(Component.text(" " + quote.count() + "개를 판매했습니다. +" + money(quote.total()) + " 골드 · 잔액 " + money(store.load(id).coins()) + " 골드")));
     }
     private void take(Player player, Map<String, Long> counts) {
         Map<String, Long> left = new HashMap<>(counts);
@@ -270,15 +270,15 @@ final class Shop implements Listener {
         plugin.frame(inventory, player);
         long coins = store.load(player.getUniqueId()).coins();
         Quote quote = confirm.quote;
-        List<Component> lore = new ArrayList<>(List.of(Ui.line("현재 잔액 " + money(coins) + " YD", NamedTextColor.GRAY), Ui.line("판매 후 잔액 " + money(coins + quote.total()) + " YD", NamedTextColor.GOLD)));
+        List<Component> lore = new ArrayList<>(List.of(Ui.line("현재 잔액 " + money(coins) + " 골드", NamedTextColor.GRAY), Ui.line("판매 후 잔액 " + money(coins + quote.total()) + " 골드", NamedTextColor.GOLD)));
         if (confirm.changed) lore.add(Ui.line("시세나 인벤토리가 바뀌어 다시 계산했습니다.", NamedTextColor.RED));
-        inventory.setItem(CONFIRM_TARGET, Ui.icon(Material.GOLD_INGOT, Ui.line("합계 " + money(quote.total()) + " YD · " + quote.count() + "개", NamedTextColor.YELLOW), lore));
+        inventory.setItem(CONFIRM_TARGET, Ui.icon(Material.GOLD_INGOT, Ui.line("합계 " + money(quote.total()) + " 골드 · " + quote.count() + "개", NamedTextColor.YELLOW), lore));
         List<String> items = List.copyOf(quote.counts().keySet());
         for (int i = 0; i < items.size() && i < CONFIRM_LINES.size(); i++) {
             String item = items.get(i);
             long count = quote.counts().get(item);
             inventory.setItem(CONFIRM_LINES.get(i), Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false),
-                List.of(Ui.line(count + "개 × " + market.price(item) + " YD = " + money(count * market.price(item)) + " YD", NamedTextColor.GRAY))));
+                List.of(Ui.line(count + "개 × " + market.price(item) + " 골드 = " + money(count * market.price(item)) + " 골드", NamedTextColor.GRAY))));
         }
         if (items.size() > CONFIRM_LINES.size()) {
             List<Component> rest = new ArrayList<>();
@@ -287,7 +287,7 @@ final class Shop implements Listener {
             }
             inventory.setItem(CONFIRM_LINES.get(CONFIRM_LINES.size() - 1), Ui.icon(Material.CHEST, Ui.line("그 외 " + rest.size() + "종", NamedTextColor.WHITE), rest));
         }
-        ItemStack yes = Ui.icon(Material.LIME_CONCRETE, Ui.line("판매", NamedTextColor.GREEN), List.of(Ui.line(money(quote.total()) + " YD를 받습니다.", NamedTextColor.GRAY)));
+        ItemStack yes = Ui.icon(Material.LIME_CONCRETE, Ui.line("판매", NamedTextColor.GREEN), List.of(Ui.line(money(quote.total()) + " 골드를 받습니다.", NamedTextColor.GRAY)));
         ItemStack no = Ui.icon(Material.RED_CONCRETE, Ui.line("취소", NamedTextColor.RED), List.of());
         for (int slot : CONFIRM_YES) inventory.setItem(slot, yes);
         for (int slot : CONFIRM_NO) inventory.setItem(slot, no);
@@ -311,7 +311,7 @@ final class Shop implements Listener {
         long cost = Math.multiplyExact(stock(kind).get(item).price(), amount);
         var id = player.getUniqueId();
         Profile profile = store.load(id);
-        if (profile.coins() < cost) { plugin.tell(player, "YD가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
+        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
         if (freeSpace(player, item) < amount) {
             plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 넣을 공간이 부족합니다.")));
             return;
@@ -320,7 +320,7 @@ final class Shop implements Listener {
             store.save(id, profile.spend(cost));
             player.getInventory().addItem(catalog.item(item, amount));
         });
-        plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 구매했습니다. -" + money(cost) + " YD · 잔액 " + money(profile.coins() - cost) + " YD")));
+        plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 구매했습니다. -" + money(cost) + " 골드 · 잔액 " + money(profile.coins() - cost) + " 골드")));
     }
     private int freeSpace(Player player, String item) {
         int free = 0, stack = catalog.maxStack(item);

@@ -18,7 +18,7 @@ import kr.maitycoon.ShopLayout;
 public class GeneratePack {
     static final int SCALE = 4, WIDTH = ShopLayout.GUI_WIDTH, HEIGHT = ShopLayout.BACKGROUND_HEIGHT, SLOT = ShopLayout.SLOT, TOP = ShopLayout.TOP, FOOTER = ShopLayout.FOOTER_ROW;
     static final int PACK_FORMAT = 75;
-    static final String DIGITS = "0123456789,-▲▼KMB/:YD";
+    static final String DIGITS = "0123456789,-▲▼KMB/:";
     static final int DIGIT_W = 3, DIGIT_H = 6;
     static final Color WOOD = new Color(0x4A3020), WOOD_LIGHT = new Color(0x6B4A30), PAPER = new Color(0xF0E4C8),
         PAPER_DARK = new Color(0xD8C49A), WELL = new Color(0xFFF8E8), LINE = new Color(0xB89C6C), INK = new Color(0x3A2818), CREAM = new Color(0xFFF2D0);
@@ -48,7 +48,8 @@ public class GeneratePack {
             text("assets/maitycoon/font/names" + row + ".json", "{\"providers\":[" + names + "]}");
         }
         text("assets/maitycoon/font/controls.json", digitFont(6, 13 - 110));
-        text("assets/maitycoon/font/footer.json", digitFont(6, 13 - 120));
+        png("assets/maitycoon/textures/gui/gold_label.png", goldLabel());
+        text("assets/maitycoon/font/footer.json", digitFont(6, 13 - 120).replace("]}]}", "]}," + bitmap("gold_label.png", 7, 13 - 119, "\\ue220") + "]}"));
         text("pack.mcmeta", "{\"pack\":{\"description\":\"Mai Tycoon\",\"min_format\":" + PACK_FORMAT + ",\"max_format\":" + PACK_FORMAT + "}}");
         Path out = Path.of("src/main/resources/pack.zip");
         try (var zip = new ZipOutputStream(Files.newOutputStream(out))) {
@@ -353,6 +354,15 @@ public class GeneratePack {
             box(g,new Color(0x252423),8+col*18,y,16,16,0);
         }
         g.dispose();return image;
+    }
+    static BufferedImage goldLabel() {
+        var image=new BufferedImage(13*SCALE,7*SCALE,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=paint(image);
+        g.setFont(font(6,true));g.setColor(new Color(0xF2DDA4));
+        g.drawString("골드",SCALE,6*SCALE);
+        g.dispose();
+        image.setRGB(image.getWidth()-1,image.getHeight()-1,0x01FFFFFF);
+        return image;
     }
     static BufferedImage tabHighlight() {
         var image=new BufferedImage(18*SCALE,17*SCALE,BufferedImage.TYPE_INT_ARGB);

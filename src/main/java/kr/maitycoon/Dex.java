@@ -9,7 +9,7 @@ public final class Dex {
         public Reward(long coins, long zcoin, boolean landPermit) { this(coins, zcoin, landPermit, 0); }
         public String describe() {
             List<String> parts = new ArrayList<>();
-            if (coins > 0) parts.add(coins + " YD");
+            if (coins > 0) parts.add(coins + " 골드");
             if (zcoin > 0) parts.add("즈코인 " + zcoin + "개");
             if (landPermit) parts.add("땅 구매 이용권");
             if (lamps > 0) parts.add("생활 램프 " + lamps + "개");

@@ -81,7 +81,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(lands, this);
             int cropLimit = getConfig().getInt("custom-crops.chunk-limit");
             if (cropLimit < 1) throw new IOException("Invalid custom crop limit");
-            customCrops = new CustomCrops(this, catalog, village, lands, cropLimit);
+            customCrops = new CustomCrops(this, catalog, village, lands, cropLimit, getConfig().getBoolean("custom-crops.bone-meal"));
             getServer().getPluginManager().registerEvents(customCrops, this);
             village.onShowcase(customCrops::plantShowcase);
             lamps = new Lamps(this, store, loadLamp());
@@ -204,7 +204,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             Material item = Material.matchMaterial(id);
             long price = section.getLong(id + ".price", -1);
             if (item == null || !item.isItem() || price < 1 || price > 1_000_000) throw new IOException("Invalid seed price for " + id);
-            // Buying must never undercut the best selling price, or YD could be minted by trading back and forth.
+            // Buying must never undercut the best selling price, or 골드 could be minted by trading back and forth.
             if (market.has(id) && price <= market.ceiling(id)) throw new IOException("Seed price must exceed top market price: " + id);
             seeds.put(id, new Shop.Listing(price, section.getString(id + ".category", "기타")));
         }
@@ -278,7 +278,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     }
     private Component moveText(Market.Move move, NamedTextColor color) {
         return catalog.name(move.id()).color(color)
-            .append(Component.text(" " + move.price() + " YD (" + (move.change() >= 0 ? "+" : "") + move.change() + ")", color));
+            .append(Component.text(" " + move.price() + " 골드 (" + (move.change() >= 0 ? "+" : "") + move.change() + ")", color));
     }
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String action = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
@@ -289,7 +289,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             switch (action) {
                 case "info" -> {
                     Profile profile = store.load(player.getUniqueId());
-                    tell(player, "보유 YD: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개 · 생활 램프: " + profile.lamps() + "개");
+                    tell(player, "보유 골드: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개 · 생활 램프: " + profile.lamps() + "개");
                 }
                 case "price" -> prices(player);
                 case "buildshop", "seedshop", "cropshop" -> {
@@ -320,7 +320,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     tell(player, "/tycoon autoplant — 자동 심기 설정");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
-                    tell(player, "/tycoon info — 보유 YD와 즈코인 확인");
+                    tell(player, "/tycoon info — 보유 골드와 즈코인 확인");
                 }
             }
         } catch (IOException | ArithmeticException e) {
@@ -394,7 +394,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         for (String id : market.ids()) {
             long change = market.change(id);
             String trend = change > 0 ? " ▲" + change : change < 0 ? " ▼" + -change : "";
-            player.sendMessage(Component.text(" · ").append(catalog.name(id)).append(Component.text(" " + market.price(id) + " YD" + trend)));
+            player.sendMessage(Component.text(" · ").append(catalog.name(id)).append(Component.text(" " + market.price(id) + " 골드" + trend)));
         }
     }
     boolean survival(Player player) {

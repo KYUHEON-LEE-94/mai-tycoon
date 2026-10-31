@@ -95,7 +95,7 @@ public final class Market {
             int next = random.nextInt(minPercent, maxPercent + 1);
             if (pressure > 0) {
                 next = clamp(next * (100 - pressure) / 100);
-                // Heavy sales must actually lower the next YD price, unless already at the floor.
+                // Heavy sales must actually lower the next 골드 price, unless already at the floor.
                 long target = Math.max(floor(id), oldPrice - Math.max(1, Math.round(oldPrice * pressure / 100.0)));
                 while (next > minPercent && priceAt(id, next) > target) next--;
             }

@@ -2,7 +2,7 @@ package kr.maitycoon;
 
 import java.util.*;
 
-/** coins is YD, the trading currency. zcoin is a separate reward currency and never converts into YD. */
+/** coins is 골드, the trading currency. zcoin is a separate reward currency and never converts into 골드. */
 public record Profile(long coins, long zcoin, long experience, boolean starterClaimed, Set<String> dex, Set<Integer> dexRewards, boolean landPermit, long lamps, long replants, boolean autoPlant) {
     public Profile {
         if (coins < 0 || zcoin < 0 || experience < 0 || lamps < 0 || replants < 0) throw new IllegalArgumentException("Negative profile value");

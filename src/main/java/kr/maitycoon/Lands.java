@@ -163,8 +163,8 @@ final class Lands implements Listener {
             holder.chunks.put(slot, new int[]{cx, cz});
             inventory.setItem(slot, cell(player, cx, cz, cx == here.getX() && cz == here.getZ(), next));
         }
-        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " YD", NamedTextColor.GOLD), List.of(Ui.line("보유 금액", NamedTextColor.GRAY))));
-        inventory.setItem(MINE, Ui.icon(Material.EMERALD_BLOCK, Ui.line("내 땅 " + owned + " / " + max, NamedTextColor.GREEN), List.of(Ui.line("다음 땅 가격 " + next + " YD", NamedTextColor.GRAY))));
+        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " 골드", NamedTextColor.GOLD), List.of(Ui.line("보유 금액", NamedTextColor.GRAY))));
+        inventory.setItem(MINE, Ui.icon(Material.EMERALD_BLOCK, Ui.line("내 땅 " + owned + " / " + max, NamedTextColor.GREEN), List.of(Ui.line("다음 땅 가격 " + next + " 골드", NamedTextColor.GRAY))));
         inventory.setItem(PERMIT, Ui.icon(profile.landPermit() ? Material.PAPER : Material.BARRIER,
             Ui.line(profile.landPermit() ? "땅 구매 이용권 보유" : "땅 구매 이용권 없음", profile.landPermit() ? NamedTextColor.GREEN : NamedTextColor.RED),
             List.of(Ui.line("수집 도감 보상으로 얻습니다.", NamedTextColor.GRAY))));
@@ -187,7 +187,7 @@ final class Lands implements Listener {
         else {
             type = Material.LIME_STAINED_GLASS;
             name = Ui.line("빈 땅", NamedTextColor.WHITE);
-            lore.add(Ui.line("우클릭으로 " + next + " YD에 구매", NamedTextColor.GREEN));
+            lore.add(Ui.line("우클릭으로 " + next + " 골드에 구매", NamedTextColor.GREEN));
         }
         if (here) type = type == Material.LIME_STAINED_GLASS ? Material.COMPASS : type;
         ItemStack icon = Ui.icon(type, name, lore);
@@ -208,7 +208,7 @@ final class Lands implements Listener {
             case OK -> {}
         }
         long cost = LandRegistry.price(price, step, registry.count(id));
-        if (profile.coins() < cost) { plugin.tell(player, "YD가 부족합니다. 필요 " + cost + " / 보유 " + profile.coins()); return; }
+        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + cost + " / 보유 " + profile.coins()); return; }
         registry.put(key, id);
         try {
             plugin.transact(player, "land", key + " -" + cost, () -> {
@@ -220,7 +220,7 @@ final class Lands implements Listener {
             try { save(); } catch (IOException rollback) { plugin.getLogger().log(Level.SEVERE, "Cannot roll back land " + key, rollback); }
             throw e;
         }
-        plugin.tell(player, "땅을 구매했습니다! 청크 " + cx + ", " + cz + " (-" + cost + " YD)");
+        plugin.tell(player, "땅을 구매했습니다! 청크 " + cx + ", " + cz + " (-" + cost + " 골드)");
     }
     /** The banner text for where the player stands, or null when there is nothing to buy here. */
     String bannerText(Player player) {
@@ -234,7 +234,7 @@ final class Lands implements Listener {
         try {
             if (!store.load(player.getUniqueId()).landPermit()) return "구매 가능한 땅 · 땅 구매 이용권 필요";
         } catch (IOException e) { return null; }
-        return String.format("[Shift+F] 이 땅 구매 · %,d YD", LandRegistry.price(price, step, owned));
+        return String.format("[Shift+F] 이 땅 구매 · %,d 골드", LandRegistry.price(price, step, owned));
     }
     void refreshBanners() {
         for (Player player : plugin.getServer().getOnlinePlayers()) {
@@ -272,7 +272,7 @@ final class Lands implements Listener {
         int x = LandRegistry.firstBlock(cx), z = LandRegistry.firstBlock(cz), size = LandRegistry.CHUNK_SIZE;
         holder.inventory.setItem(13, Ui.icon(Material.GRASS_BLOCK, Ui.line("청크 " + cx + ", " + cz, NamedTextColor.YELLOW), List.of(
             Ui.line("범위 X " + x + " ~ " + (x + size - 1) + ", Z " + z + " ~ " + (z + size - 1) + " (" + size + "×" + size + ")", NamedTextColor.GRAY),
-            Ui.line(String.format("가격 %,d YD", LandRegistry.price(price, step, owned)), NamedTextColor.GOLD),
+            Ui.line(String.format("가격 %,d 골드", LandRegistry.price(price, step, owned)), NamedTextColor.GOLD),
             Ui.line("보유 " + owned + " / " + max, NamedTextColor.GRAY))));
         ItemStack yes = Ui.icon(Material.LIME_CONCRETE, Ui.line("구매", NamedTextColor.GREEN), List.of());
         ItemStack no = Ui.icon(Material.RED_CONCRETE, Ui.line("취소", NamedTextColor.RED), List.of());

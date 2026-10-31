@@ -38,7 +38,7 @@ final class ShopTitle {
     }
     ShopTitle selectedTab(int tab){moveTo(7+tab*18);put(GUI,"\ue210",NamedTextColor.WHITE,19);return this;}
     private static String compact(long n){return n>=1_000_000_000L?n/1_000_000_000L+"B":n>=1_000_000L?n/1_000_000L+"M":n>=10_000?n/1000+"K":Long.toString(n);}
-    ShopTitle coins(long n){number("footer",15,compact(n)+"YD");return this;}
+    ShopTitle coins(long n){number("footer",15,compact(n));put(Key.key("maitycoon","footer"),"\uE220",NamedTextColor.WHITE,14);return this;}
     ShopTitle amount(int n){number("controls",41,Integer.toString(n));return this;}
     ShopTitle page(int page,int total){number("controls",82,page+"/"+total);return this;}
     /** Clock time of the next price change: the title only redraws on a click, so a countdown would freeze. */

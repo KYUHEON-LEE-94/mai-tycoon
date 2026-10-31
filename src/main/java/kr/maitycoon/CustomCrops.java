@@ -33,9 +33,11 @@ final class CustomCrops implements Listener {
     private final Village village;
     private final Lands lands;
     private final int chunkLimit;
+    private final boolean boneMeal;
     private final NamespacedKey fieldKey, displayKey;
     private final Map<Chunk, CropField> fields = new HashMap<>();
-    CustomCrops(MaiTycoonPlugin plugin, Catalog catalog, Village village, Lands lands, int chunkLimit) {
+    CustomCrops(MaiTycoonPlugin plugin, Catalog catalog, Village village, Lands lands, int chunkLimit, boolean boneMeal) {
+        this.boneMeal = boneMeal;
         this.plugin = plugin;
         this.catalog = catalog;
         this.village = village;
@@ -173,7 +175,12 @@ final class CustomCrops implements Listener {
         Catalog.Crop crop = id == null ? null : catalog.bySeed(id);
         if (crop != null) { plant(event, crop); return; }
         CropField.Plot plot = plot(event.getClickedBlock());
-        if (plot != null && item != null && item.getType() == Material.BONE_MEAL) boneMeal(event, plot);
+        if (plot == null || item == null || item.getType() != Material.BONE_MEAL) return;
+        if (boneMeal) boneMeal(event, plot);
+        else {
+            event.setCancelled(true);
+            event.getPlayer().sendActionBar(Component.text("이 작물에는 뼛가루를 쓸 수 없습니다.", NamedTextColor.GRAY));
+        }
     }
     /** Protection has already decided by MONITOR; a cancelled break keeps the plant. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
