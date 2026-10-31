@@ -16,9 +16,9 @@ import kr.maitycoon.ShopLayout;
  * Slot positions come from ShopLayout. Art is drawn at SCALE times the GUI pixel size.
  */
 public class GeneratePack {
-    static final int SCALE = 4, WIDTH = ShopLayout.GUI_WIDTH, HEIGHT = ShopLayout.GUI_HEIGHT, SLOT = ShopLayout.SLOT, TOP = ShopLayout.TOP, FOOTER = ShopLayout.FOOTER_ROW;
+    static final int SCALE = 4, WIDTH = ShopLayout.GUI_WIDTH, HEIGHT = ShopLayout.BACKGROUND_HEIGHT, SLOT = ShopLayout.SLOT, TOP = ShopLayout.TOP, FOOTER = ShopLayout.FOOTER_ROW;
     static final int PACK_FORMAT = 75;
-    static final String DIGITS = "0123456789,-▲▼";
+    static final String DIGITS = "0123456789,-▲▼KMB/:";
     static final int DIGIT_W = 3, DIGIT_H = 6;
     static final Color WOOD = new Color(0x4A3020), WOOD_LIGHT = new Color(0x6B4A30), PAPER = new Color(0xF0E4C8),
         PAPER_DARK = new Color(0xD8C49A), WELL = new Color(0xFFF8E8), LINE = new Color(0xB89C6C), INK = new Color(0x3A2818), CREAM = new Color(0xFFF2D0);
@@ -26,15 +26,22 @@ public class GeneratePack {
 
     public static void main(String[] args) throws Exception {
         System.setProperty("java.awt.headless", "true");
-        png("assets/maitycoon/textures/gui/shop_sell.png", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "희귀"), "모두 판매", new Color(0x3F8F4F)));
-        png("assets/maitycoon/textures/gui/shop_buy.png", background("씨앗 상점", List.of("전체", "씨앗", "모종", "도구"), "좌클릭 구매", new Color(0x8A6A3A)));
+        backgroundTiles("sell", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "희귀"), "모두 판매", new Color(0x3F8F4F)));
+        backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "도구"), "상품 클릭 · 구매", new Color(0x3F6C42)));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
         png("assets/maitycoon/textures/gui/digits.png", digits());
         text("assets/maitycoon/font/space.json", spaceFont());
         text("assets/maitycoon/font/gui.json", guiFont());
-for (int row = 0; row < ShopLayout.ROWS; row++) text("assets/maitycoon/font/row" + row + ".json", digitFont(DIGIT_H, 13 - (TOP + row * SLOT + 6)));
-        text("assets/maitycoon/font/header.json", digitFont(8, 13 - 5));
-        text("assets/maitycoon/font/footer.json", digitFont(8, 13 - (TOP + FOOTER * SLOT + 5)));
+        for (int i = 0; i < ShopLayout.ITEM_NAMES.size(); i++) png("assets/maitycoon/textures/gui/name_" + i + ".png", nameImage(ShopLayout.ITEM_NAMES.get(i)));
+        for (int row = 0; row < ShopLayout.ROWS; row++) {
+            text("assets/maitycoon/font/row" + row + ".json", digitFont(6, 13 - (TOP + row * SLOT + 11)));
+            text("assets/maitycoon/font/owned" + row + ".json", digitFont(6, 13 - (TOP + row * SLOT + 12)));
+            var names = new StringJoiner(",");
+            for (int i = 0; i < ShopLayout.ITEM_NAMES.size(); i++) names.add(bitmap("name_" + i + ".png", 7, 13 - (TOP + row * SLOT), String.format("\\u%04x", 0xE500+i)));
+            text("assets/maitycoon/font/names" + row + ".json", "{\"providers\":[" + names + "]}");
+        }
+        text("assets/maitycoon/font/controls.json", digitFont(6, 13 - 110));
+        text("assets/maitycoon/font/footer.json", digitFont(6, 13 - 120));
         text("pack.mcmeta", "{\"pack\":{\"description\":\"Mai Tycoon\",\"min_format\":" + PACK_FORMAT + ",\"max_format\":" + PACK_FORMAT + "}}");
         Path out = Path.of("src/main/resources/pack.zip");
         try (var zip = new ZipOutputStream(Files.newOutputStream(out))) {
@@ -48,6 +55,17 @@ for (int row = 0; row < ShopLayout.ROWS; row++) text("assets/maitycoon/font/row"
         }
         if (args.length > 0) ImageIO.write(preview(), "png", Path.of(args[0]).toFile());
         System.out.println(out + " " + Files.size(out) + " bytes");
+    }
+    static final int TILE_W = ShopLayout.TILE_WIDTH, TILE_H = ShopLayout.TILE_HEIGHT, TILE_ROWS = (HEIGHT + TILE_H - 1) / TILE_H;
+    static void backgroundTiles(String kind, BufferedImage bg) throws IOException {
+        // Each bitmap glyph must fit in the client font atlas (256px per glyph).
+        for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
+            int h = Math.min(TILE_H, HEIGHT - row * TILE_H);
+            BufferedImage tile = bg.getSubimage(col * TILE_W * SCALE, row * TILE_H * SCALE, TILE_W * SCALE, h * SCALE);
+            // Keep the measured advance exactly TILE_W + 1, including rounded outer corners.
+            tile.setRGB(tile.getWidth() - 1, tile.getHeight() - 1, 0x01FFFFFF);
+            png("assets/maitycoon/textures/gui/" + kind + "_" + row + "_" + col + ".png", tile);
+        }
     }
     static void png(String name, BufferedImage image) throws IOException {
         var bytes = new ByteArrayOutputStream();
@@ -82,45 +100,50 @@ for (int row = 0; row < ShopLayout.ROWS; row++) text("assets/maitycoon/font/row"
     }
     static int slotX(int column) { return ShopLayout.slotX(column); }
     static int slotY(int row) { return ShopLayout.slotY(row); }
+    static BufferedImage nameImage(String name) {
+        var image = new BufferedImage(48*SCALE,7*SCALE,BufferedImage.TYPE_INT_ARGB);
+        var g=paint(image);g.setColor(new Color(0xF7F2E7));g.setFont(font(6,true));
+        if(g.getFontMetrics().stringWidth(name)>47*SCALE)g.setFont(font(5,true));
+        g.drawString(name,0,6*SCALE);g.dispose();image.setRGB(48*SCALE-1,7*SCALE-1,0x01FFFFFF);return image;
+    }
     static BufferedImage background(String title, List<String> tabs, String action, Color actionColor) {
-        var image = new BufferedImage(WIDTH * SCALE, HEIGHT * SCALE, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = paint(image);
-        box(g, WOOD, 0, 0, WIDTH, HEIGHT, 6);
-        box(g, WOOD_LIGHT, 2, 2, WIDTH - 4, 13, 4);
-        centered(g, title, font(9, true), CREAM, 34, 8.5);
-        centered(g, "YD", font(8, true), new Color(0xFFD860), 161, 8.5);
-        box(g, PAPER_DARK, 3, 16, 21, 91, 3);
-        box(g, PAPER, 25, 16, WIDTH - 28, 91, 3);
-        for (int row = 0; row < ShopLayout.ROWS; row++) {
-            if (row < tabs.size()) {
-                box(g, WELL, slotX(0) - 3, slotY(row) - 1, 18, 17, 3);
-                centered(g, tabs.get(row), font(7, true), INK, slotX(0) + 6, slotY(row) + 7.5);
-            }
-            for (int column = 1; column < 9; column += 2) {
-                box(g, WELL, slotX(column) - 1, slotY(row) - 1, 18, 18, 3);
-                outline(g, LINE, slotX(column) - 1, slotY(row) - 1, 18, 18, 3);
-            }
+        var image=new BufferedImage(WIDTH*SCALE,HEIGHT*SCALE,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=paint(image);
+        box(g,new Color(0x211E1C),0,0,WIDTH,HEIGHT,0);
+        box(g,new Color(0x322921),0,0,WIDTH,14,0);
+        g.setColor(new Color(0xE9D49C));g.fillRect(0,14*SCALE,WIDTH*SCALE,SCALE/2);
+        g.setFont(font(8,true));g.drawString(title,7*SCALE,10*SCALE);
+        for(int row=0;row<ShopLayout.ROWS;row++)for(int col=0;col<2;col++) {
+            int x=7+col*90,y=TOP+row*SLOT-1;
+            box(g,new Color(0x302B29),x,y,72,17,0);
+            outline(g,new Color(0x675B4B),x,y,72,17,0);
+            box(g,new Color(0xE9D49C),x,y,72,1,0);
+            outline(g,new Color(0x8D8276),x+1,y+1,17,15,0);
+            box(g,new Color(0x242322),x+45,y+7,26,10,0);
+            outline(g,new Color(0x887D70),x+45,y+7,26,10,0);
+            centered(g,title.contains("농산물")?"판매":"구매",font(4,true),new Color(0xE16A62),x+58,y+9);
         }
-        box(g, WOOD_LIGHT, slotX(0) - 1, slotY(FOOTER) - 1, 18, 18, 3);
-        centered(g, "◀", font(9, true), CREAM, slotX(0) + 8, slotY(FOOTER) + 8);
-        box(g, WOOD_LIGHT, slotX(8) - 1, slotY(FOOTER) - 1, 18, 18, 3);
-        centered(g, "▶", font(9, true), CREAM, slotX(8) + 8, slotY(FOOTER) + 8);
-        box(g, WOOD_LIGHT, slotX(1) - 1, slotY(FOOTER) - 1, 3 * SLOT - 1, 18, 3);
-        centered(g, "수량", font(8, true), CREAM, slotX(1) + 11, slotY(FOOTER) + 8);
-        box(g, actionColor, slotX(4) - 1, slotY(FOOTER) - 1, 4 * SLOT - 1, 18, 3);
-        centered(g, action, font(9, true), Color.WHITE, slotX(4) + 34, slotY(FOOTER) + 8);
-        g.dispose();
-        return image;
+        for(int i=0;i<tabs.size();i++)centered(g,tabs.get(i),font(5,true),CREAM,16+i*18,98);
+        centered(g,title.contains("농산물")?"모두 판매":"상품 클릭 · 구매",font(5,true),CREAM,133,98);
+        centered(g,"수량",font(5,false),CREAM,30,113);
+        centered(g,"◀",font(7,true),CREAM,70,113);
+        centered(g,"▶",font(7,true),CREAM,106,113);
+        centered(g,"●",font(7,true),new Color(0xFFD35E),10,123);
+        centered(g,"YD",font(5,true),CREAM,52,123);
+        centered(g,"시세 변경",font(4,false),CREAM,151,113);
+        box(g,new Color(0x181818),3,130,170,89,0);
+        centered(g,"보관함",font(5,false),new Color(0xAB9E87),20,134);
+        for(int row=0;row<4;row++)for(int col=0;col<9;col++) {
+            int y=row==3?198:140+row*18;
+            box(g,new Color(0x393632),7+col*18,y-1,18,18,0);
+            box(g,new Color(0x252423),8+col*18,y,16,16,0);
+        }
+        g.dispose();return image;
     }
     static BufferedImage tabHighlight() {
-        var image = new BufferedImage(18 * SCALE, 17 * SCALE, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = paint(image);
-        outline(g, new Color(0xE06020), 1, 1, 16, 15, 3);
-        g.setStroke(new BasicStroke(SCALE));
-        g.drawRoundRect(SCALE, SCALE, 16 * SCALE, 15 * SCALE, 3 * SCALE, 3 * SCALE);
-        image.setRGB(image.getWidth() - 1, image.getHeight() - 1, 0x01FFFFFF);
-        g.dispose();
-        return image;
+        var image=new BufferedImage(18*SCALE,17*SCALE,BufferedImage.TYPE_INT_ARGB);
+        var g=paint(image);box(g,new Color(0xF2DDA4),1,15,16,1,0);g.dispose();
+        image.setRGB(image.getWidth()-1,image.getHeight()-1,0x01FFFFFF);return image;
     }
     static BufferedImage digits() {
         int w = DIGIT_W * SCALE, h = DIGIT_H * SCALE;
@@ -152,9 +175,12 @@ for (int row = 0; row < ShopLayout.ROWS; row++) text("assets/maitycoon/font/row"
     }
     static String guiFont() {
         var providers = new StringJoiner(",");
-        providers.add(bitmap("shop_sell.png", HEIGHT, 13, "\\ue200"));
-        providers.add(bitmap("shop_buy.png", HEIGHT, 13, "\\ue201"));
-        for (int row = 0; row < ShopLayout.ROWS; row++) providers.add(bitmap("tab.png", 17, 13 - (TOP + row * SLOT - 1), String.format("\\ue21%d", row)));
+        for (int kind = 0; kind < 2; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
+            int h = Math.min(TILE_H, HEIGHT - row * TILE_H);
+            providers.add(bitmap((kind == 0 ? "sell" : "buy") + "_" + row + "_" + col + ".png", h,
+                13 - row * TILE_H, String.format("\\u%04x", (kind == 0 ? 0xE300 : 0xE400) + row * 4 + col)));
+        }
+        providers.add(bitmap("tab.png", 17, 13 - 90, "\\ue210"));
         return "{\"providers\":[" + providers + "]}";
     }
     static String digitFont(int height, int ascent) {
@@ -164,7 +190,7 @@ for (int row = 0; row < ShopLayout.ROWS; row++) text("assets/maitycoon/font/row"
     }
     /** Debug view of the sell screen at SCALE, on a dark backdrop. */
     static BufferedImage preview() throws IOException {
-        BufferedImage bg = ImageIO.read(new ByteArrayInputStream(FILES.get("assets/maitycoon/textures/gui/shop_sell.png")));
+        BufferedImage bg = background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "희귀"), "모두 판매", new Color(0x3F6C42));
         var image = new BufferedImage(bg.getWidth() + 80, bg.getHeight() + 80, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
         g.setColor(new Color(0x303030));

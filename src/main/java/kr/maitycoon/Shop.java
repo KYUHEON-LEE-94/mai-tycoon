@@ -133,22 +133,21 @@ final class Shop implements Listener {
             inventory.setItem(ShopLayout.itemSlot(i), holder.kind == Kind.SELL ? sellIcon(item, player, holder) : buyIcon(item, holder));
             if (!drawn) inventory.setItem(ShopLayout.priceSlot(i), priceIcon(holder.kind, item));
         }
-        if (drawn) holder.title = drawnTitle(holder, coins);
+        if (drawn) holder.title = drawnTitle(holder, coins, player, pages);
         else {
             plainControls(holder, pages);
             holder.title = Component.text(holder.kind.title + " · " + String.format("%,d", coins) + " YD");
         }
     }
-    private Component drawnTitle(Holder holder, long coins) {
+    private Component drawnTitle(Holder holder, long coins, Player player, int pages) {
         ShopTitle title = new ShopTitle().background(holder.kind);
         int selected = holder.tabs.indexOf(holder.tab);
         if (selected >= 0) title.selectedTab(selected);
         for (int i = 0; i < holder.page.size(); i++) {
             Material item = holder.page.get(i);
-            if (holder.kind == Kind.SELL) title.price(ShopLayout.row(i), ShopLayout.itemColumn(i) + 1, market.price(item.name()), market.change(item.name()));
-            else title.price(ShopLayout.row(i), ShopLayout.itemColumn(i) + 1, seeds.get(item).price(), 0);
+            title.product(i, item.name(), holder.kind == Kind.SELL ? market.price(item.name()) : seeds.get(item).price(), Ui.count(player, item));
         }
-        return title.coins(coins).amount(AMOUNTS[holder.amountIndex]).build();
+        return title.coins(coins).amount(AMOUNTS[holder.amountIndex]).page(holder.pageIndex + 1, pages).timer(java.time.LocalTime.now().plusSeconds(plugin.secondsToNextMarket())).build();
     }
     private void plainControls(Holder holder, int pages) {
         Inventory inventory = holder.inventory;

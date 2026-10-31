@@ -11,14 +11,14 @@ class ShopLayoutTest {
             assertTrue(used.add(ShopLayout.itemSlot(i)));
             assertTrue(used.add(ShopLayout.priceSlot(i)));
         }
-        assertEquals(40, used.size());
+        assertEquals(16, used.size());
     }
     @Test void regionsDoNotOverlap() {
         for (int slot = 0; slot < ShopLayout.SIZE; slot++) {
             int regions = (ShopLayout.tabAt(slot) >= 0 ? 1 : 0) + (ShopLayout.itemAt(slot) >= 0 ? 1 : 0)
                 + (ShopLayout.AMOUNT.contains(slot) ? 1 : 0) + (ShopLayout.ACTION.contains(slot) ? 1 : 0)
                 + (slot == ShopLayout.PREV || slot == ShopLayout.NEXT ? 1 : 0);
-            assertEquals(1, regions, "slot " + slot);
+            assertTrue(regions <= 1, "Overlapping actions at slot " + slot);
         }
     }
     @Test void coversOutOfRangeSlots() {

@@ -61,8 +61,13 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(village, this);
             getServer().getPluginManager().registerEvents(dexMenu, this);
             getServer().getPluginManager().registerEvents(lands, this);
-            resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
-            getServer().getPluginManager().registerEvents(resourcePack, this);
+            try {
+                resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
+                getServer().getPluginManager().registerEvents(resourcePack, this);
+            } catch (IOException e) {
+                // The pack is optional: without it every player gets the plain shop screens.
+                getLogger().log(Level.WARNING, "Resource pack is not being served", e);
+            }
             nextMarketChange = System.currentTimeMillis() + marketInterval;
             long ticks = marketInterval / 50;
             getServer().getScheduler().runTaskTimer(this, this::refreshPrices, ticks, ticks);
