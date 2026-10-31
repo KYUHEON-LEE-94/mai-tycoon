@@ -15,7 +15,7 @@ class BuildingShopTest {
             var config = YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8));
             var shop = config.getConfigurationSection("building-shop");
             assertNotNull(shop);
-            assertEquals(24, shop.getKeys(false).size());
+            assertEquals(149, shop.getKeys(false).size());
             var categories = new HashSet<String>();
             for (String id : shop.getKeys(false)) {
                 var material = Material.valueOf(id);

@@ -30,7 +30,8 @@ public class GeneratePack {
         backgroundTiles("sell", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "특산"), "모두 판매", new Color(0x3F8F4F)));
         backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "비료", "특산"), "상품 클릭 · 구매", new Color(0x3F6C42)));
         backgroundTiles("panel", panel());
-        backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식"), "상품 클릭 · 구매", new Color(0x3F6C42)));
+        backgroundTiles("furniture", background("가구 상점", List.of("전체", "침대", "조명", "수납", "장식"), "상품 클릭 · 구매", new Color(0x3F6C42)));
+        backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식", "색상"), "상품 클릭 · 구매", new Color(0x3F6C42)));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
         npcSkins();
         miniMapFonts();
@@ -46,7 +47,7 @@ public class GeneratePack {
             text("assets/maitycoon/font/row" + row + ".json", digitFont(6, 13 - (TOP + row * SLOT + 11)));
             text("assets/maitycoon/font/owned" + row + ".json", digitFont(6, 13 - (TOP + row * SLOT + 12)));
             var names = new StringJoiner(",");
-            for (int i = 0; i < ShopLayout.ITEM_NAMES.size(); i++) names.add(bitmap("name_" + i + ".png", 7, 13 - (TOP + row * SLOT), String.format("\\u%04x", 0xE500+i)));
+            for (int i = 0; i < ShopLayout.ITEM_NAMES.size(); i++) names.add(bitmap("name_" + i + ".png", 7, 13 - (TOP + row * SLOT), String.format("\\u%04x", ShopLayout.NAME_BASE+i)));
             text("assets/maitycoon/font/names" + row + ".json", "{\"providers\":[" + names + "]}");
         }
         text("assets/maitycoon/font/controls.json", digitFont(6, 13 - 110));
@@ -309,6 +310,8 @@ public class GeneratePack {
         png("assets/minecraft/textures/entity/player/wide/kai.png", skin(0xC98F63, 0x3B2A1C, 0x4F7A3A, 0xE3D4A8, 0x4A3A2A, 0xD9B44A));
         png("assets/minecraft/textures/entity/player/wide/makena.png", skin(0xE0AC84, 0x6B3A1E, 0xA8562E, 0x3F6C42, 0x3D2E22, 0x7A9A4A));
         png("assets/minecraft/textures/entity/player/wide/efe.png", skin(0xD8A27A, 0x22242C, 0x2F3F6B, 0xE9E2CF, 0x2A2A33, 0));
+        png("assets/minecraft/textures/entity/player/wide/sunny.png", skin(0xE0AC84, 0x8A4A24, 0x6B5A8A, 0xD9C7A0, 0x3D2E22, 0));
+        png("assets/minecraft/textures/entity/player/wide/noor.png", skin(0xC98F63, 0x2A2018, 0x7A6A4A, 0xC9A050, 0x3A3028, 0x8A6A3A));
         png("assets/minecraft/textures/entity/player/wide/zuri.png", skin(0xB57C52, 0x8A8378, 0x6B4A30, 0xE9D49C, 0x3A2A1E, 0x5A4632));
     }
     static BufferedImage skin(int face, int hair, int shirt, int apron, int pants, int hat) {
@@ -426,10 +429,10 @@ public class GeneratePack {
     }
     static String guiFont() {
         var providers = new StringJoiner(",");
-        for (int kind = 0; kind < 4; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
+        for (int kind = 0; kind < 5; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
             int h = Math.min(TILE_H, HEIGHT - row * TILE_H);
-            providers.add(bitmap(List.of("sell", "buy", "build", "panel").get(kind) + "_" + row + "_" + col + ".png", h,
-                13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800).get(kind) + row * 4 + col)));
+            providers.add(bitmap(List.of("sell", "buy", "build", "panel", "furniture").get(kind) + "_" + row + "_" + col + ".png", h,
+                13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900).get(kind) + row * 4 + col)));
         }
         providers.add(bitmap("tab.png", 17, 13 - 90, "\\ue210"));
         providers.add(bitmap("minimap_frame.png", MINIMAP_FRAME, MINIMAP_TOP - 2, "\\ue221"));

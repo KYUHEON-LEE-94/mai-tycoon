@@ -17,7 +17,7 @@ import org.bukkit.inventory.*;
  */
 final class Shop implements Listener {
     enum Kind {
-        SELL("농산물 상점"), BUY("씨앗 상점"), BUILD("건축 자재 상점");
+        SELL("농산물 상점"), BUY("씨앗 상점"), BUILD("건축 자재 상점"), FURNITURE("가구 상점");
         final String title;
         Kind(String title) { this.title = title; }
     }
@@ -61,10 +61,10 @@ final class Shop implements Listener {
     private final ProfileStore store;
     private final Map<String, String> crops;
     private final Map<String, Listing> seeds;
-    private final Map<String, Listing> building;
+    private final Map<String, Listing> building, furniture;
     private final Catalog catalog;
     private final Set<UUID> packReady = new HashSet<>();
-    Shop(MaiTycoonPlugin plugin, Market market, ProfileStore store, Catalog catalog, Map<String, String> crops, Map<String, Listing> seeds, Map<String, Listing> building) {
+    Shop(MaiTycoonPlugin plugin, Market market, ProfileStore store, Catalog catalog, Map<String, String> crops, Map<String, Listing> seeds, Map<String, Listing> building, Map<String, Listing> furniture) {
         this.plugin = plugin;
         this.market = market;
         this.store = store;
@@ -72,6 +72,7 @@ final class Shop implements Listener {
         this.crops = crops;
         this.seeds = seeds;
         this.building = building;
+        this.furniture = furniture;
         for (Kind kind : Kind.values()) {
             if (categories(kind).size() > ShopLayout.MAX_TABS) throw new IllegalArgumentException("Too many shop categories for " + kind);
         }
@@ -110,7 +111,7 @@ final class Shop implements Listener {
             else if (top instanceof Confirm confirm) plugin.guarded(player, () -> requote(confirm, player));
         }
     }
-    private Map<String, Listing> stock(Kind kind) { return kind == Kind.BUILD ? building : seeds; }
+    private Map<String, Listing> stock(Kind kind) { return kind == Kind.BUILD ? building : kind == Kind.FURNITURE ? furniture : seeds; }
     private List<String> categories(Kind kind) {
         List<String> tabs = new ArrayList<>(List.of(ALL));
         Collection<String> all = kind == Kind.SELL ? crops.values() : stock(kind).values().stream().map(Listing::category).toList();

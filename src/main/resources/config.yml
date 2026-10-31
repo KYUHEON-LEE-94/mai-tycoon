@@ -71,6 +71,8 @@ custom-crops:
     BLUEBERRY: {name: 블루베리, seed-name: 블루베리 씨앗, base: 300, swing: 10, seed-price: 170, grow-minutes: 45, yield: [1, 2]}
 # 수집 도감. 원본은 300개 규모이며 등록 방식은 미확인이라 아이템 1개를 제출하는 방식으로 구현했습니다.
 dex:
+  # true면 아래 페이지 외에 게임에서 얻을 수 있는 나머지 아이템도 블록, 음식, 기타 페이지로 자동 등록합니다.
+  all-items: true
   pages:
     농사: [WHEAT, CARROT, POTATO, BEETROOT, PUMPKIN, MELON_SLICE, SWEET_BERRIES, GLOW_BERRIES, COCOA_BEANS, SUGAR_CANE, CACTUS, BAMBOO, KELP, BROWN_MUSHROOM, RED_MUSHROOM, NETHER_WART, TORCHFLOWER, PITCHER_PLANT]
     채광: [COBBLESTONE, COAL, RAW_IRON, RAW_COPPER, RAW_GOLD, REDSTONE, LAPIS_LAZULI, DIAMOND, EMERALD, QUARTZ, AMETHYST_SHARD, OBSIDIAN, FLINT, CLAY_BALL, GLOWSTONE_DUST, NETHERRACK, END_STONE, ANCIENT_DEBRIS]
@@ -84,6 +86,11 @@ dex:
     30: {coins: 3000, zcoin: 5, land-permit: true}
     50: {coins: 10000, zcoin: 10}
     72: {coins: 30000, zcoin: 20}
+    100: {coins: 50000, zcoin: 20}
+    150: {coins: 80000, zcoin: 30}
+    200: {coins: 120000, zcoin: 50}
+    250: {coins: 160000}
+    300: {coins: 250000, zcoin: 100}
 # 생활 램프 옵션 범위. 수치는 2차 자료의 괭이 옵션 기재를 따릅니다. 적용 절차와 옵션 교체 규칙은 원본 미확인이라 제안 구현입니다.
 lamp:
   CROP: {min-percent: 20, max-percent: 50, min-amount: 1, max-amount: 3}
@@ -102,6 +109,90 @@ tractor:
   radius: 4
   # 틱당 수확 칸 수. 높이면 서버 부하가 늘어납니다.
   blocks-per-tick: 2
+# 가구 상점. 바닐라 가구용 블록과 아이템의 고정 구매가입니다. 품목과 가격은 개발용 값입니다.
+furniture-shop:
+  WHITE_BED: {price: 40, category: 침대}
+  LIGHT_GRAY_BED: {price: 40, category: 침대}
+  GRAY_BED: {price: 40, category: 침대}
+  BLACK_BED: {price: 40, category: 침대}
+  BROWN_BED: {price: 40, category: 침대}
+  RED_BED: {price: 40, category: 침대}
+  ORANGE_BED: {price: 40, category: 침대}
+  YELLOW_BED: {price: 40, category: 침대}
+  LIME_BED: {price: 40, category: 침대}
+  GREEN_BED: {price: 40, category: 침대}
+  CYAN_BED: {price: 40, category: 침대}
+  LIGHT_BLUE_BED: {price: 40, category: 침대}
+  BLUE_BED: {price: 40, category: 침대}
+  PURPLE_BED: {price: 40, category: 침대}
+  MAGENTA_BED: {price: 40, category: 침대}
+  PINK_BED: {price: 40, category: 침대}
+  LANTERN: {price: 15, category: 조명}
+  SOUL_LANTERN: {price: 15, category: 조명}
+  TORCH: {price: 15, category: 조명}
+  SOUL_TORCH: {price: 15, category: 조명}
+  SEA_LANTERN: {price: 15, category: 조명}
+  GLOWSTONE: {price: 15, category: 조명}
+  SHROOMLIGHT: {price: 15, category: 조명}
+  REDSTONE_LAMP: {price: 15, category: 조명}
+  END_ROD: {price: 15, category: 조명}
+  CANDLE: {price: 15, category: 조명}
+  WHITE_CANDLE: {price: 15, category: 조명}
+  RED_CANDLE: {price: 15, category: 조명}
+  BLUE_CANDLE: {price: 15, category: 조명}
+  YELLOW_CANDLE: {price: 15, category: 조명}
+  COPPER_BULB: {price: 15, category: 조명}
+  CHEST: {price: 30, category: 수납}
+  TRAPPED_CHEST: {price: 30, category: 수납}
+  BARREL: {price: 30, category: 수납}
+  BOOKSHELF: {price: 30, category: 수납}
+  CHISELED_BOOKSHELF: {price: 30, category: 수납}
+  DECORATED_POT: {price: 30, category: 수납}
+  CRAFTING_TABLE: {price: 30, category: 수납}
+  FURNACE: {price: 30, category: 수납}
+  SMOKER: {price: 30, category: 수납}
+  BLAST_FURNACE: {price: 30, category: 수납}
+  ANVIL: {price: 300, category: 수납}
+  LOOM: {price: 30, category: 수납}
+  CARTOGRAPHY_TABLE: {price: 30, category: 수납}
+  SMITHING_TABLE: {price: 30, category: 수납}
+  STONECUTTER: {price: 30, category: 수납}
+  GRINDSTONE: {price: 30, category: 수납}
+  LECTERN: {price: 30, category: 수납}
+  CAULDRON: {price: 30, category: 수납}
+  COMPOSTER: {price: 30, category: 수납}
+  BREWING_STAND: {price: 30, category: 수납}
+  ENCHANTING_TABLE: {price: 300, category: 수납}
+  JUKEBOX: {price: 120, category: 수납}
+  PAINTING: {price: 20, category: 장식}
+  ITEM_FRAME: {price: 20, category: 장식}
+  GLOW_ITEM_FRAME: {price: 20, category: 장식}
+  FLOWER_POT: {price: 20, category: 장식}
+  ARMOR_STAND: {price: 20, category: 장식}
+  BELL: {price: 20, category: 장식}
+  CAMPFIRE: {price: 20, category: 장식}
+  SOUL_CAMPFIRE: {price: 20, category: 장식}
+  OAK_SIGN: {price: 20, category: 장식}
+  OAK_HANGING_SIGN: {price: 20, category: 장식}
+  WHITE_BANNER: {price: 20, category: 장식}
+  RED_BANNER: {price: 20, category: 장식}
+  BLUE_BANNER: {price: 20, category: 장식}
+  WHITE_CARPET: {price: 6, category: 장식}
+  LIGHT_GRAY_CARPET: {price: 6, category: 장식}
+  GRAY_CARPET: {price: 6, category: 장식}
+  BLACK_CARPET: {price: 6, category: 장식}
+  BROWN_CARPET: {price: 6, category: 장식}
+  RED_CARPET: {price: 6, category: 장식}
+  ORANGE_CARPET: {price: 6, category: 장식}
+  YELLOW_CARPET: {price: 6, category: 장식}
+  LIME_CARPET: {price: 6, category: 장식}
+  GREEN_CARPET: {price: 6, category: 장식}
+  CYAN_CARPET: {price: 6, category: 장식}
+  LIGHT_BLUE_CARPET: {price: 6, category: 장식}
+  BLUE_CARPET: {price: 6, category: 장식}
+  PURPLE_CARPET: {price: 6, category: 장식}
+  MAGENTA_CARPET: {price: 6, category: 장식}
+  PINK_CARPET: {price: 6, category: 장식}
 # 청크(16×16블록) 단위 땅. 1인당 10개이고, 가격은 미확인이라 개발용 값입니다.
 # n번째 땅 가격 = price + step × (이미 보유한 땅 수)
 land:
@@ -126,6 +217,131 @@ village:
 
 # 건축 자재 구매가 (개발용 골드). 수량 선택 또는 우클릭 64개 구매.
 building-shop:
+  JUNGLE_LOG: {price: 12, category: 목재}
+  JUNGLE_PLANKS: {price: 3, category: 목재}
+  ACACIA_LOG: {price: 12, category: 목재}
+  ACACIA_PLANKS: {price: 3, category: 목재}
+  DARK_OAK_LOG: {price: 12, category: 목재}
+  DARK_OAK_PLANKS: {price: 3, category: 목재}
+  MANGROVE_LOG: {price: 12, category: 목재}
+  MANGROVE_PLANKS: {price: 3, category: 목재}
+  PALE_OAK_LOG: {price: 12, category: 목재}
+  PALE_OAK_PLANKS: {price: 3, category: 목재}
+  OAK_STAIRS: {price: 4, category: 목재}
+  OAK_SLAB: {price: 2, category: 목재}
+  SPRUCE_STAIRS: {price: 4, category: 목재}
+  SPRUCE_SLAB: {price: 2, category: 목재}
+  BIRCH_STAIRS: {price: 4, category: 목재}
+  BIRCH_SLAB: {price: 2, category: 목재}
+  CHERRY_STAIRS: {price: 4, category: 목재}
+  CHERRY_SLAB: {price: 2, category: 목재}
+  JUNGLE_STAIRS: {price: 4, category: 목재}
+  JUNGLE_SLAB: {price: 2, category: 목재}
+  ACACIA_STAIRS: {price: 4, category: 목재}
+  ACACIA_SLAB: {price: 2, category: 목재}
+  DARK_OAK_STAIRS: {price: 4, category: 목재}
+  DARK_OAK_SLAB: {price: 2, category: 목재}
+  BAMBOO_PLANKS: {price: 4, category: 목재}
+  CRIMSON_PLANKS: {price: 5, category: 목재}
+  WARPED_PLANKS: {price: 5, category: 목재}
+  POLISHED_ANDESITE: {price: 6, category: 석재}
+  POLISHED_DIORITE: {price: 6, category: 석재}
+  POLISHED_GRANITE: {price: 6, category: 석재}
+  ANDESITE: {price: 6, category: 석재}
+  DIORITE: {price: 6, category: 석재}
+  GRANITE: {price: 6, category: 석재}
+  MOSSY_COBBLESTONE: {price: 6, category: 석재}
+  MOSSY_STONE_BRICKS: {price: 6, category: 석재}
+  CRACKED_STONE_BRICKS: {price: 6, category: 석재}
+  SMOOTH_STONE: {price: 6, category: 석재}
+  TUFF_BRICKS: {price: 6, category: 석재}
+  MUD_BRICKS: {price: 6, category: 석재}
+  RED_SANDSTONE: {price: 6, category: 석재}
+  PRISMARINE_BRICKS: {price: 6, category: 석재}
+  DARK_PRISMARINE: {price: 6, category: 석재}
+  NETHER_BRICKS: {price: 6, category: 석재}
+  POLISHED_BLACKSTONE_BRICKS: {price: 6, category: 석재}
+  END_STONE_BRICKS: {price: 6, category: 석재}
+  QUARTZ_BRICKS: {price: 6, category: 석재}
+  POLISHED_DEEPSLATE: {price: 6, category: 석재}
+  CALCITE: {price: 6, category: 석재}
+  COBBLESTONE_STAIRS: {price: 5, category: 석재}
+  STONE_BRICK_STAIRS: {price: 5, category: 석재}
+  BRICK_STAIRS: {price: 5, category: 석재}
+  SANDSTONE_STAIRS: {price: 5, category: 석재}
+  COBBLESTONE_SLAB: {price: 5, category: 석재}
+  STONE_BRICK_SLAB: {price: 5, category: 석재}
+  BRICK_SLAB: {price: 5, category: 석재}
+  OAK_FENCE: {price: 10, category: 장식}
+  OAK_FENCE_GATE: {price: 10, category: 장식}
+  OAK_DOOR: {price: 10, category: 장식}
+  SPRUCE_DOOR: {price: 10, category: 장식}
+  GLASS_PANE: {price: 10, category: 장식}
+  IRON_BARS: {price: 10, category: 장식}
+  LADDER: {price: 10, category: 장식}
+  SEA_LANTERN: {price: 10, category: 장식}
+  GLOWSTONE: {price: 10, category: 장식}
+  WHITE_TERRACOTTA: {price: 5, category: 색상}
+  LIGHT_GRAY_WOOL: {price: 8, category: 색상}
+  LIGHT_GRAY_CONCRETE: {price: 6, category: 색상}
+  LIGHT_GRAY_TERRACOTTA: {price: 5, category: 색상}
+  LIGHT_GRAY_STAINED_GLASS: {price: 6, category: 색상}
+  GRAY_WOOL: {price: 8, category: 색상}
+  GRAY_CONCRETE: {price: 6, category: 색상}
+  GRAY_TERRACOTTA: {price: 5, category: 색상}
+  GRAY_STAINED_GLASS: {price: 6, category: 색상}
+  BLACK_WOOL: {price: 8, category: 색상}
+  BLACK_CONCRETE: {price: 6, category: 색상}
+  BLACK_TERRACOTTA: {price: 5, category: 색상}
+  BLACK_STAINED_GLASS: {price: 6, category: 색상}
+  BROWN_WOOL: {price: 8, category: 색상}
+  BROWN_CONCRETE: {price: 6, category: 색상}
+  BROWN_TERRACOTTA: {price: 5, category: 색상}
+  BROWN_STAINED_GLASS: {price: 6, category: 색상}
+  RED_WOOL: {price: 8, category: 색상}
+  RED_CONCRETE: {price: 6, category: 색상}
+  RED_TERRACOTTA: {price: 5, category: 색상}
+  RED_STAINED_GLASS: {price: 6, category: 색상}
+  ORANGE_WOOL: {price: 8, category: 색상}
+  ORANGE_CONCRETE: {price: 6, category: 색상}
+  ORANGE_TERRACOTTA: {price: 5, category: 색상}
+  ORANGE_STAINED_GLASS: {price: 6, category: 색상}
+  YELLOW_WOOL: {price: 8, category: 색상}
+  YELLOW_CONCRETE: {price: 6, category: 색상}
+  YELLOW_TERRACOTTA: {price: 5, category: 색상}
+  YELLOW_STAINED_GLASS: {price: 6, category: 색상}
+  LIME_WOOL: {price: 8, category: 색상}
+  LIME_CONCRETE: {price: 6, category: 색상}
+  LIME_TERRACOTTA: {price: 5, category: 색상}
+  LIME_STAINED_GLASS: {price: 6, category: 색상}
+  GREEN_WOOL: {price: 8, category: 색상}
+  GREEN_CONCRETE: {price: 6, category: 색상}
+  GREEN_TERRACOTTA: {price: 5, category: 색상}
+  GREEN_STAINED_GLASS: {price: 6, category: 색상}
+  CYAN_WOOL: {price: 8, category: 색상}
+  CYAN_CONCRETE: {price: 6, category: 색상}
+  CYAN_TERRACOTTA: {price: 5, category: 색상}
+  CYAN_STAINED_GLASS: {price: 6, category: 색상}
+  LIGHT_BLUE_WOOL: {price: 8, category: 색상}
+  LIGHT_BLUE_CONCRETE: {price: 6, category: 색상}
+  LIGHT_BLUE_TERRACOTTA: {price: 5, category: 색상}
+  LIGHT_BLUE_STAINED_GLASS: {price: 6, category: 색상}
+  BLUE_WOOL: {price: 8, category: 색상}
+  BLUE_CONCRETE: {price: 6, category: 색상}
+  BLUE_TERRACOTTA: {price: 5, category: 색상}
+  BLUE_STAINED_GLASS: {price: 6, category: 색상}
+  PURPLE_WOOL: {price: 8, category: 색상}
+  PURPLE_CONCRETE: {price: 6, category: 색상}
+  PURPLE_TERRACOTTA: {price: 5, category: 색상}
+  PURPLE_STAINED_GLASS: {price: 6, category: 색상}
+  MAGENTA_WOOL: {price: 8, category: 색상}
+  MAGENTA_CONCRETE: {price: 6, category: 색상}
+  MAGENTA_TERRACOTTA: {price: 5, category: 색상}
+  MAGENTA_STAINED_GLASS: {price: 6, category: 색상}
+  PINK_WOOL: {price: 8, category: 색상}
+  PINK_CONCRETE: {price: 6, category: 색상}
+  PINK_TERRACOTTA: {price: 5, category: 색상}
+  PINK_STAINED_GLASS: {price: 6, category: 색상}
   OAK_LOG: {price: 12, category: 목재}
   SPRUCE_LOG: {price: 12, category: 목재}
   BIRCH_LOG: {price: 12, category: 목재}
@@ -143,9 +359,9 @@ building-shop:
   SANDSTONE: {price: 4, category: 석재}
   TERRACOTTA: {price: 5, category: 석재}
   GLASS: {price: 4, category: 장식}
-  WHITE_STAINED_GLASS: {price: 6, category: 장식}
-  WHITE_CONCRETE: {price: 6, category: 장식}
-  WHITE_WOOL: {price: 8, category: 장식}
+  WHITE_STAINED_GLASS: {price: 6, category: 색상}
+  WHITE_CONCRETE: {price: 6, category: 색상}
+  WHITE_WOOL: {price: 8, category: 색상}
   LANTERN: {price: 24, category: 장식}
   IRON_CHAIN: {price: 12, category: 장식}
   OAK_LEAVES: {price: 3, category: 장식}

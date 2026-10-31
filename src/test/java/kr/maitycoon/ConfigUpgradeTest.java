@@ -15,7 +15,7 @@ class ConfigUpgradeTest {
             old.setDefaults(defaults);
             old.options().copyDefaults(true);
             assertEquals(12, old.getConfigurationSection("custom-crops.crops").getKeys(false).size());
-            assertEquals(24, old.getConfigurationSection("building-shop").getKeys(false).size());
+            assertEquals(149, old.getConfigurationSection("building-shop").getKeys(false).size());
             assertFalse(old.getConfigurationSection("lamp").getKeys(false).isEmpty());
             assertEquals(123, old.getInt("custom-crops.crops.CABBAGE.seed-price"));
             assertEquals(70, old.getInt("market.min-percent"));

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.*;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -15,19 +16,22 @@ import org.bukkit.inventory.*;
 final class DexMenu implements Listener {
     private static final class Holder implements InventoryHolder {
         private final Map<Integer, String> tabs = new HashMap<>();
-        private final Map<Integer, Material> entries = new HashMap<>();
+        private final Map<Integer, String> entries = new HashMap<>();
         private String page;
+        private int subpage;
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int INFO = 0, FIRST_TAB = 2, BODY_START = 9, BODY_SIZE = 36, PROGRESS = 49;
+    private static final int INFO = 0, FIRST_TAB = 1, BODY_START = 9, BODY_SIZE = 36, PREV = 45, PROGRESS = 49, NEXT = 53;
     private final MaiTycoonPlugin plugin;
     private final Dex dex;
     private final ProfileStore store;
-    DexMenu(MaiTycoonPlugin plugin, Dex dex, ProfileStore store) {
+    private final Catalog catalog;
+    DexMenu(MaiTycoonPlugin plugin, Dex dex, ProfileStore store, Catalog catalog) {
         this.plugin = plugin;
         this.dex = dex;
         this.store = store;
+        this.catalog = catalog;
     }
     void open(Player player) {
         Holder holder = new Holder();
@@ -45,28 +49,32 @@ final class DexMenu implements Listener {
         int slot = FIRST_TAB;
         for (var page : dex.pages().entrySet()) {
             long done = page.getValue().stream().filter(profile.dex()::contains).count();
-            ItemStack tab = Ui.icon(Material.valueOf(page.getValue().get(0)), Ui.line(page.getKey(), NamedTextColor.WHITE),
+            ItemStack tab = Ui.decorate(catalog.item(page.getValue().get(0), 1), Ui.line(page.getKey(), NamedTextColor.WHITE),
                 List.of(Ui.line(done + " / " + page.getValue().size(), NamedTextColor.GRAY)));
             holder.tabs.put(slot, page.getKey());
             inventory.setItem(slot++, page.getKey().equals(holder.page) ? Ui.glow(tab) : tab);
         }
         List<String> entries = dex.pages().get(holder.page);
-        for (int i = 0; i < entries.size() && i < BODY_SIZE; i++) {
-            Material item = Material.valueOf(entries.get(i));
-            holder.entries.put(BODY_START + i, item);
-            inventory.setItem(BODY_START + i, entry(item, profile, player));
+        int pages = Math.max(1, (entries.size() + BODY_SIZE - 1) / BODY_SIZE);
+        holder.subpage = Math.min(holder.subpage, pages - 1);
+        int skip = holder.subpage * BODY_SIZE;
+        for (int i = skip; i < entries.size() && i < skip + BODY_SIZE; i++) {
+            String id = entries.get(i);
+            holder.entries.put(BODY_START + i - skip, id);
+            inventory.setItem(BODY_START + i - skip, entry(id, profile, player));
         }
         inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " 골드", NamedTextColor.GOLD), List.of(Ui.line("즈코인 " + profile.zcoin() + "개", NamedTextColor.AQUA))));
         inventory.setItem(PROGRESS, progress(profile));
+        if (holder.subpage > 0) inventory.setItem(PREV, Ui.icon(Material.ARROW, Ui.line("이전 페이지", NamedTextColor.WHITE), List.of()));
+        if (holder.subpage < pages - 1) inventory.setItem(NEXT, Ui.icon(Material.ARROW, Ui.line("다음 페이지 " + (holder.subpage + 2) + "/" + pages, NamedTextColor.WHITE), List.of()));
     }
-    private ItemStack entry(Material item, Profile profile, Player player) {
-        if (profile.dex().contains(item.name())) {
-            return Ui.glow(Ui.icon(item, Ui.name(item, NamedTextColor.GREEN), List.of(Ui.line("등록 완료", NamedTextColor.GREEN))));
-        }
-        long owned = Ui.count(player, item);
+    private Component title(String id, NamedTextColor color) { return catalog.name(id).color(color).decoration(TextDecoration.ITALIC, false); }
+    private ItemStack entry(String id, Profile profile, Player player) {
+        if (profile.dex().contains(id)) return Ui.glow(Ui.decorate(catalog.item(id, 1), title(id, NamedTextColor.GREEN), List.of(Ui.line("등록 완료", NamedTextColor.GREEN))));
+        long owned = catalog.count(player, id);
         return owned > 0
-            ? Ui.icon(item, Ui.name(item, NamedTextColor.YELLOW), List.of(Ui.line("보유 " + owned + "개", NamedTextColor.GRAY), Ui.line("클릭하면 1개를 제출해 등록합니다. 제출한 아이템은 사라집니다.", NamedTextColor.GREEN)))
-            : Ui.icon(Material.GRAY_DYE, Ui.name(item, NamedTextColor.DARK_GRAY), List.of(Ui.line("미등록", NamedTextColor.GRAY)));
+            ? Ui.decorate(catalog.item(id, 1), title(id, NamedTextColor.YELLOW), List.of(Ui.line("보유 " + owned + "개", NamedTextColor.GRAY), Ui.line("클릭하면 1개를 제출해 등록합니다. 제출한 아이템은 사라집니다.", NamedTextColor.GREEN)))
+            : Ui.icon(Material.GRAY_DYE, title(id, NamedTextColor.DARK_GRAY), List.of(Ui.line("미등록", NamedTextColor.GRAY)));
     }
     private ItemStack progress(Profile profile) {
         List<Component> lore = new ArrayList<>();
@@ -77,23 +85,27 @@ final class DexMenu implements Listener {
         }
         return Ui.icon(Material.WRITABLE_BOOK, Ui.line("도감 " + profile.dex().size() + " / " + dex.total(), NamedTextColor.YELLOW), lore);
     }
-    private void register(Player player, Material item, int slot) throws IOException {
+    private int slotOf(Player player, String id) {
+        ItemStack[] contents = player.getInventory().getStorageContents();
+        for (int slot = 0; slot < contents.length; slot++) if (id.equals(catalog.idOf(contents[slot]))) return slot;
+        return -1;
+    }
+    private void register(Player player, String id, int slot) throws IOException {
         if (!plugin.survival(player)) return;
-        if (slot < 0 || !dex.has(item.name())) return;
-        var id = player.getUniqueId();
-        Profile before = store.load(id);
-        if (before.dex().contains(item.name())) { plugin.tell(player, "이미 등록된 항목입니다."); return; }
+        if (slot < 0 || id == null || !dex.has(id)) return;
+        var uuid = player.getUniqueId();
+        Profile before = store.load(uuid);
+        if (before.dex().contains(id)) { plugin.tell(player, "이미 등록된 항목입니다."); return; }
         if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
-        Profile after = dex.register(before, item.name());
-        plugin.transact(player, "dex", item.name(), () -> {
-            store.save(id, after);
+        Profile after = dex.register(before, id);
+        plugin.transact(player, "dex", id, () -> {
+            store.save(uuid, after);
             Ui.take(player, slot, 1);
         });
-        plugin.tell(player, Component.text("도감 등록: ").append(Component.translatable(item)).append(Component.text(" (" + after.dex().size() + "/" + dex.total() + ")")));
+        plugin.tell(player, Component.text("도감 등록: ").append(catalog.name(id)).append(Component.text(" (" + after.dex().size() + "/" + dex.total() + ")")));
         for (int tier : after.dexRewards()) {
             if (before.dexRewards().contains(tier)) continue;
-            Dex.Reward reward = dex.rewards().get(tier);
-            plugin.tell(player, "도감 " + tier + "개 달성! " + reward.describe());
+            plugin.tell(player, "도감 " + tier + "개 달성! " + dex.rewards().get(tier).describe());
         }
     }
     @EventHandler
@@ -103,11 +115,12 @@ final class DexMenu implements Listener {
         if (!(event.getWhoClicked() instanceof Player player) || event.getClick() != ClickType.LEFT) return;
         int raw = event.getRawSlot();
         plugin.guarded(player, () -> {
-            String tab = holder.tabs.get(raw);
-            Material entry = holder.entries.get(raw);
-            if (tab != null) holder.page = tab;
-            else if (entry != null) register(player, entry, Ui.firstPlain(player, entry));
-            else if (raw >= Ui.SIZE && Ui.plain(event.getCurrentItem())) register(player, event.getCurrentItem().getType(), event.getSlot());
+            String tab = holder.tabs.get(raw), entry = holder.entries.get(raw);
+            if (tab != null) { holder.page = tab; holder.subpage = 0; }
+            else if (raw == PREV) holder.subpage = Math.max(0, holder.subpage - 1);
+            else if (raw == NEXT) holder.subpage++;
+            else if (entry != null) register(player, entry, slotOf(player, entry));
+            else if (raw >= Ui.SIZE) register(player, catalog.idOf(event.getCurrentItem()), event.getSlot());
             else return;
             render(holder, player);
         });

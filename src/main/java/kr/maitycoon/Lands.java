@@ -38,7 +38,7 @@ final class Lands implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int COLUMNS = 9, ROWS = 5, INFO = 45, AUTO_PLANT = 46, MINE = 47, LAMP = 48, PERMIT = 49, FARM = 51, SHOW = 53;
+    private static final int COLUMNS = 9, ROWS = 5, INFO = 45, DEX = 45, AUTO_PLANT = 46, MINE = 47, LAMP = 48, PERMIT = 49, FARM = 51, SHOW = 53;
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
     private final Village village;
@@ -199,10 +199,11 @@ final class Lands implements Listener {
         World world = player.getWorld();
         var id = player.getUniqueId();
         Profile profile = store.load(id);
-        if (!profile.landPermit()) { plugin.tell(player, "땅 구매 이용권이 필요합니다. 수집 도감을 채워 얻으세요."); return; }
+        boolean admin = player.hasPermission("maitycoon.admin");
+        if (!profile.landPermit() && !admin) { plugin.tell(player, "땅 구매 이용권이 필요합니다. 수집 도감을 채워 얻으세요."); return; }
         if (village.overlaps(world, cx, cz)) { plugin.tell(player, "마을 구역은 살 수 없습니다."); return; }
         String key = key(world, cx, cz);
-        switch (registry.check(key, id, max)) {
+        switch (registry.check(key, id, admin ? Integer.MAX_VALUE : max)) {
             case TAKEN -> { plugin.tell(player, "이미 주인이 있는 땅입니다."); return; }
             case LIMIT -> { plugin.tell(player, "땅은 최대 " + max + "개까지 살 수 있습니다."); return; }
             case OK -> {}
@@ -278,16 +279,17 @@ final class Lands implements Listener {
         ItemStack no = Ui.icon(Material.RED_CONCRETE, Ui.line("취소", NamedTextColor.RED), List.of());
         for (int slot : List.of(30, 31, 32)) holder.inventory.setItem(slot, yes);
         for (int slot : List.of(39, 40, 41)) holder.inventory.setItem(slot, no);
+        holder.inventory.setItem(DEX, Ui.icon(Material.BOOK, Ui.line("수집 도감 열기", NamedTextColor.YELLOW), List.of()));
         player.openInventory(holder.inventory);
     }
     @EventHandler(ignoreCancelled = true)
     public void onHotkey(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
-        String text = bannerText(player);
-        if (!player.isSneaking() || text == null) return;
+        if (!player.isSneaking()) return;
         event.setCancelled(true);
-        if (text.startsWith("[")) openBuy(player);
-        else plugin.tell(player, "땅 구매 이용권이 필요합니다. 수집 도감을 채워 얻으세요.");
+        String text = bannerText(player);
+        if (text != null && text.startsWith("[")) openBuy(player);
+        else plugin.openDex(player);
     }
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
@@ -312,6 +314,7 @@ final class Lands implements Listener {
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player) || event.getClick() != ClickType.LEFT) return;
         int slot = event.getRawSlot();
+        if (slot == DEX) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openDex(player)); return; }
         if (slot >= 30 && slot <= 32 && !holder.done) {
             holder.done = true;
             plugin.guarded(player, () -> buy(player, holder.chunkX, holder.chunkZ));
@@ -373,12 +376,12 @@ final class Lands implements Listener {
     /** Own or worker land, or unclaimed ground. Never someone else's land, even for admins. */
     boolean mayReplant(Player player, Block block) {
         var role = registry.role(key(block), player.getUniqueId());
-        return role != LandRegistry.Role.VISITOR;
+        return role != LandRegistry.Role.VISITOR || player.hasPermission("maitycoon.admin");
     }
     /** Claimed land the player works on. Tractors never run on open ground or anyone else's land. */
     boolean mayTractor(Player player, Block block) {
         var role = registry.role(key(block), player.getUniqueId());
-        return role == LandRegistry.Role.OWNER || role == LandRegistry.Role.WORKER;
+        return role == LandRegistry.Role.OWNER || role == LandRegistry.Role.WORKER || (role != null && player.hasPermission("maitycoon.admin"));
     }
     boolean allowsPlanting(Player player, Block block) { return !refused(player, block, LandRegistry.Action.PLANT); }
     private boolean refused(Player player, Block block, LandRegistry.Action action) {

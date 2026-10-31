@@ -35,6 +35,7 @@ public record Profile(long coins, long zcoin, long experience, boolean starterCl
         if (zcoinCost <= 0 || tractor) throw new IllegalArgumentException("Invalid purchase");
         return new Profile(coins, zcoin - zcoinCost, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant, true);
     }
+    public Profile addZcoin(long count) { return new Profile(coins, Math.addExact(zcoin, count), experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant, tractor); }
     public Profile claimStarter() { return new Profile(coins, zcoin, experience, true, dex, dexRewards, landPermit, lamps, replants, autoPlant, tractor); }
     public Profile collect(String id) {
         Set<String> next = new HashSet<>(dex);

@@ -28,7 +28,7 @@ final class ShopTitle {
         return this;
     }
     ShopTitle background(Shop.Kind kind){
-        tiles(kind==Shop.Kind.SELL?0xE300:kind==Shop.Kind.BUY?0xE400:0xE600);
+        tiles(switch(kind){case SELL->0xE300;case BUY->0xE400;case BUILD->0xE600;case FURNITURE->0xE900;});
         return this;
     }
     private void tiles(int base){
@@ -46,7 +46,7 @@ final class ShopTitle {
     ShopTitle product(int index,String id,long price,long owned){
         int row=ShopLayout.row(index),x=ShopLayout.slotX(ShopLayout.itemColumn(index));
         int name=ShopLayout.ITEM_IDS.indexOf(id);
-        if(name>=0){moveTo(x+20);put(Key.key("maitycoon","names"+row),String.valueOf((char)(0xE500+name)),NamedTextColor.WHITE,49);}
+        if(name>=0){moveTo(x+20);put(Key.key("maitycoon","names"+row),String.valueOf((char)(ShopLayout.NAME_BASE+name)),NamedTextColor.WHITE,49);}
         number("row"+row,x+56,compact(price));number("owned"+row,x,compact(owned));return this;
     }
     ShopTitle spaceRight(int width){moveTo(cursor+width);return this;}

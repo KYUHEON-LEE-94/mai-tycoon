@@ -37,7 +37,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private static final String CUSTOM_CATEGORY = "특산물";
     private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
     private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
-    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop");
+    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop", "give");
     @Override public void onEnable() {
         saveDefaultConfig();
         // Merge new sections and crop entries into old installations without replacing configured values.
@@ -58,8 +58,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             Map<String, Shop.Listing> seeds = loadSeeds();
             marketInterval = getConfig().getInt("market.interval-minutes") * 60_000L;
             if (marketInterval < 60_000) throw new IOException("Invalid market interval");
-            shop = new Shop(this, market, store, catalog, crops, seeds, loadBuilding());
-            dexMenu = new DexMenu(this, loadDex(), store);
+            shop = new Shop(this, market, store, catalog, crops, seeds, loadShelf("building-shop"), loadShelf("furniture-shop"));
+            dexMenu = new DexMenu(this, loadDex(), store, catalog);
             Map<String, Consumer<Player>> npcActions = new HashMap<>();
             int reserve = getConfig().getInt("village.reserve");
             if (reserve < 0) throw new IOException("Invalid village reserve");
@@ -72,6 +72,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L);
             npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
             npcActions.put("building", player -> shop.open(player, Shop.Kind.BUILD));
+            npcActions.put("furniture", player -> shop.open(player, Shop.Kind.FURNITURE));
             npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
             npcActions.put("dex", dexMenu::open);
             npcActions.put("land", lands::open);
@@ -205,6 +206,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             pages.put(page, entries);
         }
         if (pages.isEmpty()) throw new IOException("Empty dex");
+        List<String> farm = new ArrayList<>(pages.values().iterator().next());
+        for (Catalog.Crop crop : catalog.crops()) farm.add(crop.id());
+        pages.put(pages.keySet().iterator().next(), farm);
+        if (getConfig().getBoolean("dex.all-items")) pages.putAll(DexItems.remaining(pages));
         Map<Integer, Dex.Reward> rewards = new HashMap<>();
         for (String tier : rewardSection.getKeys(false)) {
             rewards.put(Integer.parseInt(tier), new Dex.Reward(rewardSection.getLong(tier + ".coins"), rewardSection.getLong(tier + ".zcoin"), rewardSection.getBoolean(tier + ".land-permit"), rewardSection.getLong(tier + ".lamp")));
@@ -229,16 +234,16 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         return seeds;
     }
-    private Map<String, Shop.Listing> loadBuilding() throws IOException {
-        var section = getConfig().getConfigurationSection("building-shop");
-        if (section == null) throw new IOException("Missing building-shop");
+    private Map<String, Shop.Listing> loadShelf(String name) throws IOException {
+        var section = getConfig().getConfigurationSection(name);
+        if (section == null) throw new IOException("Missing " + name);
         Map<String, Shop.Listing> result = new LinkedHashMap<>();
         for (String id : section.getKeys(false)) {
             Material material = Material.matchMaterial(id);
             long price = section.getLong(id + ".price", -1);
-            if (material == null || !material.isItem() || !material.isBlock() || price < 1 || price > 1_000_000)
-                throw new IOException("Invalid building material: " + id);
-            if (market.has(id) && price <= market.ceiling(id)) throw new IOException("Building price below market ceiling: " + id);
+            if (material == null || !material.isItem() || price < 1 || price > 1_000_000)
+                throw new IOException("Invalid item in " + name + ": " + id);
+            if (market.has(id) && price <= market.ceiling(id)) throw new IOException("Price below market ceiling in " + name + ": " + id);
             result.put(id, new Shop.Listing(price, section.getString(id + ".category", "장식")));
         }
         return result;
@@ -350,10 +355,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         boolean step = action.equals("market") && args.length == 2 && args[1].equalsIgnoreCase("next");
         boolean records = action.equals("journal");
         boolean giveLamp = (action.equals("lamp") || action.equals("autoplant")) && args.length == 4 && args[1].equalsIgnoreCase("give");
-        if (!build && !buildNow && !step && !records && !giveLamp) return false;
+        boolean giveMoney = action.equals("give") && args.length == 4;
+        if (!build && !buildNow && !step && !records && !giveLamp && !giveMoney) return false;
         if (!sender.hasPermission("maitycoon.admin")) { sender.sendMessage("권한이 없습니다."); return true; }
         if (step) { refreshPrices(); sender.sendMessage("시세를 갱신했습니다."); }
         else if (giveLamp) give(sender, args[2], args[3], action.equals("lamp"));
+        else if (giveMoney) giveMoney(sender, args[1], args[2], args[3]);
         else if (build) sender.sendMessage("월드 스폰 주변 약 110칸 사방의 지형을 평탄화하고 마을을 짓습니다. 되돌릴 수 없으니 월드를 백업한 뒤 /tycoon village build confirm 을 입력하세요.");
         else if (buildNow) {
             sender.sendMessage("마을을 짓습니다.");
@@ -362,6 +369,25 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         else journal(sender, args);
         return true;
     }
+    /** /tycoon give <이름> gold|zcoin <수량> */
+    private void giveMoney(CommandSender sender, String name, String kind, String amount) {
+        var target = getServer().getOfflinePlayerIfCached(name);
+        if (target == null) { sender.sendMessage("서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다."); return; }
+        boolean gold = kind.equalsIgnoreCase("gold");
+        if (!gold && !kind.equalsIgnoreCase("zcoin")) { sender.sendMessage("/tycoon give <이름> gold|zcoin <수량>"); return; }
+        try {
+            long count = Long.parseLong(amount);
+            if (count < 1) throw new NumberFormatException();
+            Profile profile = store.load(target.getUniqueId());
+            store.save(target.getUniqueId(), gold ? profile.sell(count) : profile.addZcoin(count));
+            sender.sendMessage(name + "에게 " + (gold ? count + " 골드" : "즈코인 " + count + "개") + "를 지급했습니다.");
+        } catch (NumberFormatException e) { sender.sendMessage("수량을 확인해 주세요."); }
+        catch (IOException e) {
+            getLogger().log(Level.SEVERE, "Cannot give money", e);
+            sender.sendMessage("지급하지 못했습니다.");
+        }
+    }
+    void openDex(Player player) { dexMenu.open(player); }
     private void give(CommandSender sender, String name, String amount, boolean lamp) {
         var target = getServer().getOfflinePlayerIfCached(name);
         if (target == null) { sender.sendMessage("서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다."); return; }
@@ -413,7 +439,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
     }
     boolean survival(Player player) {
-        if (player.getGameMode() == GameMode.SURVIVAL) return true;
+        if (player.getGameMode() == GameMode.SURVIVAL || player.hasPermission("maitycoon.admin")) return true;
         tell(player, "농사 보급과 거래는 서바이벌 모드에서 사용할 수 있습니다.");
         return false;
     }
