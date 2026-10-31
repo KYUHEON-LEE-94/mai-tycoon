@@ -2,7 +2,7 @@ package kr.maitycoon;
 
 import java.io.IOException;
 import java.nio.file.*;
-import java.util.UUID;
+import java.util.*;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -22,7 +22,8 @@ public final class ProfileStore {
             if (!yaml.isLong("coins") && !yaml.isInt("coins")) throw new IOException("Invalid coins");
             if (!yaml.isLong("experience") && !yaml.isInt("experience")) throw new IOException("Invalid experience");
             if (!yaml.isBoolean("starter-claimed")) throw new IOException("Invalid starter flag");
-            return new Profile(yaml.getLong("coins"), yaml.getLong("experience"), yaml.getBoolean("starter-claimed"));
+            return new Profile(yaml.getLong("coins"), yaml.getLong("experience"), yaml.getBoolean("starter-claimed"),
+                new HashSet<>(yaml.getStringList("dex")), new HashSet<>(yaml.getIntegerList("dex-rewards")), yaml.getBoolean("land-permit"));
         } catch (InvalidConfigurationException | IllegalArgumentException e) {
             throw new IOException("Invalid profile: " + id, e);
         }
@@ -32,6 +33,9 @@ public final class ProfileStore {
         yaml.set("coins", profile.coins());
         yaml.set("experience", profile.experience());
         yaml.set("starter-claimed", profile.starterClaimed());
+        yaml.set("dex", new TreeSet<>(profile.dex()).stream().toList());
+        yaml.set("dex-rewards", new TreeSet<>(profile.dexRewards()).stream().toList());
+        yaml.set("land-permit", profile.landPermit());
         Path temp = Files.createTempFile(directory, id.toString(), ".tmp");
         try {
             Files.writeString(temp, yaml.saveToString());

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -23,11 +24,13 @@ final class Village implements Listener {
     record Zone(int x1, int z1, int x2, int z2) {
         boolean contains(int dx, int dz) { return dx >= x1 && dx <= x2 && dz >= z1 && dz <= z2; }
     }
-    private record Npc(String id, int dx, int dz, String name, Villager.Profession profession, Shop.Kind shop) {}
+    private record Npc(String id, int dx, int dz, float yaw, String name, Villager.Profession profession) {}
     private static final List<Npc> NPCS = List.of(
-        new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, "작물 상인", Villager.Profession.FARMER, Shop.Kind.SELL),
-        new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, "씨앗 상인", Villager.Profession.FLETCHER, Shop.Kind.BUY));
-    private static final Set<Material> FARMABLE = EnumSet.of(Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
+        new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, 0f, "작물 상인", Villager.Profession.FARMER),
+        new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, 0f, "씨앗 상인", Villager.Profession.FLETCHER),
+        new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", Villager.Profession.LIBRARIAN),
+        new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", Villager.Profession.CARTOGRAPHER));
+    static final Set<Material> FARMABLE = EnumSet.of(Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
         Material.MELON, Material.PUMPKIN, Material.MELON_STEM, Material.PUMPKIN_STEM, Material.ATTACHED_MELON_STEM, Material.ATTACHED_PUMPKIN_STEM,
         Material.SUGAR_CANE, Material.CACTUS, Material.BAMBOO, Material.BAMBOO_SAPLING, Material.COCOA, Material.SWEET_BERRY_BUSH,
         Material.CAVE_VINES, Material.CAVE_VINES_PLANT, Material.NETHER_WART, Material.KELP, Material.KELP_PLANT,
@@ -36,13 +39,14 @@ final class Village implements Listener {
     private final MaiTycoonPlugin plugin;
     private final File file;
     private final NamespacedKey npcKey;
-    private final Shop shop;
+    private final Map<String, Consumer<Player>> npcActions;
     private String worldName;
     private int x, y, z;
     private boolean built, building;
-    Village(MaiTycoonPlugin plugin, Shop shop) throws IOException {
+    /** npcActions is keyed by NPC id and may be filled after construction. */
+    Village(MaiTycoonPlugin plugin, Map<String, Consumer<Player>> npcActions) throws IOException {
         this.plugin = plugin;
-        this.shop = shop;
+        this.npcActions = npcActions;
         this.file = new File(plugin.getDataFolder(), "village.yml");
         this.npcKey = new NamespacedKey(plugin, "npc");
         if (!file.exists()) return;
@@ -56,7 +60,13 @@ final class Village implements Listener {
         built = yaml.getBoolean("built");
     }
     boolean built() { return built; }
-    private World world() { return worldName == null ? null : plugin.getServer().getWorld(worldName); }
+    World world() { return worldName == null ? null : plugin.getServer().getWorld(worldName); }
+    /** True when the chunk touches the town or its terrain slope. */
+    boolean overlaps(World world, int chunkX, int chunkZ) {
+        if (!built || !world.getName().equals(worldName)) return false;
+        int reach = VillageBuilder.RADIUS + VillageBuilder.BLEND;
+        return (chunkX << 4) + 15 >= x - reach && (chunkX << 4) <= x + reach && (chunkZ << 4) + 15 >= z - reach && (chunkZ << 4) <= z + reach;
+    }
     Location spawn() {
         World world = world();
         return world == null ? null : new Location(world, x + 0.5, y + 1, z + VillageBuilder.SPAWN_DZ + 0.5, 180f, 0f);
@@ -115,20 +125,18 @@ final class Village implements Listener {
         for (Player player : world.getPlayers()) if (inside(player.getLocation())) player.teleport(spawn);
         plugin.getLogger().info("Village ready");
     }
-    /** Keeps exactly one of each NPC, including after chunks were edited or an NPC was removed. */
+    /** Replaces every NPC so exactly one of each exists, whatever an older version or a lost save left behind. */
     void ensureNpcs() {
         World world = world();
         if (world == null) return;
         for (Npc npc : NPCS) {
-            Location at = new Location(world, x + npc.dx() + 0.5, y + 1, z + npc.dz() + 0.5, 0f, 0f);
-            boolean found = false;
+            Location at = new Location(world, x + npc.dx() + 0.5, y + 1, z + npc.dz() + 0.5, npc.yaw(), 0f);
             for (Entity entity : at.getChunk().getEntities()) {
-                if (!npc.id().equals(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) continue;
-                if (found) entity.remove();
-                else { found = true; entity.teleport(at); }
+                if (npc.id().equals(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) entity.remove();
             }
-            if (found) continue;
             world.spawn(at, Villager.class, villager -> {
+                // Empty offers stop vanilla trade generation, which fails when a save runs it during chunk unload.
+                villager.setRecipes(List.of());
                 villager.setProfession(npc.profession());
                 villager.setVillagerLevel(5);
                 villager.customName(Component.text(npc.name(), NamedTextColor.GREEN));
@@ -161,7 +169,8 @@ final class Village implements Listener {
         if (id == null) return;
         event.setCancelled(true);
         if (event.getHand() != EquipmentSlot.HAND || !event.getPlayer().hasPermission("maitycoon.play")) return;
-        NPCS.stream().filter(npc -> npc.id().equals(id)).findFirst().ifPresent(npc -> shop.open(event.getPlayer(), npc.shop()));
+        var action = npcActions.get(id);
+        if (action != null) action.accept(event.getPlayer());
     }
     @EventHandler public void onNpcDamage(EntityDamageEvent event) { if (npc(event.getEntity())) event.setCancelled(true); }
     @EventHandler public void onNpcTransform(EntityTransformEvent event) { if (npc(event.getEntity())) event.setCancelled(true); }

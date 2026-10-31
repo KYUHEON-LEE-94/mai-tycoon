@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -21,8 +22,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private Market market;
     private Shop shop;
     private Village village;
+    private DexMenu dexMenu;
+    private Lands lands;
     private long marketInterval, nextMarketChange;
-    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village");
+    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land");
     private static final List<String> ADMIN_ACTIONS = List.of("market");
     @Override public void onEnable() {
         saveDefaultConfig();
@@ -30,15 +33,28 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             store = new ProfileStore(getDataFolder().toPath().resolve("players"));
             market = loadMarket();
             restoreMarket();
-            Map<Material, Long> seeds = loadSeeds();
+            Map<Material, String> crops = loadCrops();
+            Map<Material, Shop.Listing> seeds = loadSeeds();
             marketInterval = getConfig().getInt("market.interval-minutes") * 60_000L;
             if (marketInterval < 60_000) throw new IOException("Invalid market interval");
-            shop = new Shop(this, market, store, seeds);
-            village = new Village(this, shop);
+            shop = new Shop(this, market, store, crops, seeds);
+            dexMenu = new DexMenu(this, loadDex(), store);
+            Map<String, Consumer<Player>> npcActions = new HashMap<>();
+            village = new Village(this, npcActions);
+            long landPrice = getConfig().getLong("land.price"), landStep = getConfig().getLong("land.step");
+            int landMax = getConfig().getInt("land.max");
+            if (landPrice < 1 || landStep < 0 || landMax < 1) throw new IOException("Invalid land settings");
+            lands = new Lands(this, store, village, landPrice, landStep, landMax);
+            npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
+            npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
+            npcActions.put("dex", dexMenu::open);
+            npcActions.put("land", lands::open);
             Objects.requireNonNull(getCommand("tycoon")).setExecutor(this);
             Objects.requireNonNull(getCommand("tycoon")).setTabCompleter(this);
             getServer().getPluginManager().registerEvents(shop, this);
             getServer().getPluginManager().registerEvents(village, this);
+            getServer().getPluginManager().registerEvents(dexMenu, this);
+            getServer().getPluginManager().registerEvents(lands, this);
             nextMarketChange = System.currentTimeMillis() + marketInterval;
             long ticks = marketInterval / 50;
             getServer().getScheduler().runTaskTimer(this, this::refreshPrices, ticks, ticks);
@@ -62,17 +78,40 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         return new Market(rules, getConfig().getInt("market.min-percent"), getConfig().getInt("market.max-percent"));
     }
-    private Map<Material, Long> loadSeeds() throws IOException {
+    private Map<Material, String> loadCrops() {
+        var section = Objects.requireNonNull(getConfig().getConfigurationSection("crops"));
+        Map<Material, String> crops = new LinkedHashMap<>();
+        for (String id : section.getKeys(false)) crops.put(Material.valueOf(id), section.getString(id + ".category", "기타"));
+        return crops;
+    }
+    private Dex loadDex() throws IOException {
+        var pageSection = getConfig().getConfigurationSection("dex.pages");
+        var rewardSection = getConfig().getConfigurationSection("dex.rewards");
+        if (pageSection == null || rewardSection == null) throw new IOException("Missing dex");
+        Map<String, List<String>> pages = new LinkedHashMap<>();
+        for (String page : pageSection.getKeys(false)) {
+            List<String> entries = pageSection.getStringList(page);
+            for (String id : entries) if (Material.matchMaterial(id) == null || !Material.valueOf(id).isItem()) throw new IOException("Invalid dex entry " + id);
+            pages.put(page, entries);
+        }
+        if (pages.isEmpty()) throw new IOException("Empty dex");
+        Map<Integer, Dex.Reward> rewards = new HashMap<>();
+        for (String tier : rewardSection.getKeys(false)) {
+            rewards.put(Integer.parseInt(tier), new Dex.Reward(rewardSection.getLong(tier + ".coins"), rewardSection.getBoolean(tier + ".land-permit")));
+        }
+        return new Dex(pages, rewards);
+    }
+    private Map<Material, Shop.Listing> loadSeeds() throws IOException {
         var section = getConfig().getConfigurationSection("seeds");
         if (section == null) throw new IOException("Missing seeds");
-        Map<Material, Long> seeds = new LinkedHashMap<>();
+        Map<Material, Shop.Listing> seeds = new LinkedHashMap<>();
         for (String id : section.getKeys(false)) {
             Material item = Material.matchMaterial(id);
-            long price = section.getLong(id, -1);
+            long price = section.getLong(id + ".price", -1);
             if (item == null || !item.isItem() || price < 1 || price > 1_000_000) throw new IOException("Invalid seed price for " + id);
             // Buying must never undercut the best selling price, or YD could be minted by trading back and forth.
             if (market.has(id) && price <= market.ceiling(id)) throw new IOException("Seed price must exceed top market price: " + id);
-            seeds.put(item, price);
+            seeds.put(item, new Shop.Listing(price, section.getString(id + ".category", "기타")));
         }
         return seeds;
     }
@@ -83,7 +122,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         try { yaml.load(marketFile()); }
         catch (InvalidConfigurationException e) { throw new IOException("Invalid market.yml", e); }
         for (String id : market.ids()) {
-            if (yaml.isInt(id + ".percent")) market.restore(id, yaml.getInt(id + ".percent"), yaml.getInt(id + ".previous", yaml.getInt(id + ".percent")));
+            if (!yaml.isInt(id + ".percent")) continue;
+            market.restore(id, yaml.getInt(id + ".percent"), yaml.getInt(id + ".previous", yaml.getInt(id + ".percent")));
+            market.restoreTrail(id, yaml.getIntegerList(id + ".trail"));
         }
     }
     private void saveMarket() throws IOException {
@@ -91,6 +132,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         for (String id : market.ids()) {
             yaml.set(id + ".percent", market.percent(id));
             yaml.set(id + ".previous", market.previousPercent(id));
+            yaml.set(id + ".trail", market.trail(id));
         }
         yaml.save(marketFile());
     }
@@ -120,6 +162,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "info" -> tell(player, "보유 YD: " + store.load(player.getUniqueId()).coins());
                 case "price" -> prices(player);
                 case "starter" -> starter(player);
+                case "dex" -> dexMenu.open(player);
+                case "land" -> lands.open(player);
                 case "village" -> {
                     if (!village.built()) tell(player, "마을이 아직 지어지지 않았습니다.");
                     else { player.teleport(village.spawn()); tell(player, "마을 광장으로 이동했습니다."); }
@@ -128,6 +172,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     tell(player, "광장의 작물 상인에게 작물을 팔고, 씨앗 상인에게 씨앗과 도구를 살 수 있습니다.");
                     tell(player, "/tycoon starter — 테스트용 최초 1회 보급품 받기");
                     tell(player, "/tycoon price — 현재 작물 시세 보기");
+                    tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
+                    tell(player, "/tycoon land — 땅 지도와 청크 구매");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
                     tell(player, "/tycoon info — 보유 YD 확인");
                 }
@@ -169,9 +215,17 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         if (profile.starterClaimed()) { tell(player, "이미 시작 보급품을 받았습니다."); return; }
         long empty = Arrays.stream(player.getInventory().getStorageContents()).filter(i -> i == null || i.getType().isAir()).count();
         if (empty < 3) { tell(player, "인벤토리에 빈칸 3개가 필요합니다."); return; }
-        store.save(player.getUniqueId(), new Profile(profile.coins(), profile.experience(), true));
+        store.save(player.getUniqueId(), profile.claimStarter());
         player.getInventory().addItem(new ItemStack(Material.STONE_HOE), new ItemStack(Material.WHEAT_SEEDS, 16), new ItemStack(Material.BREAD, 8));
         tell(player, "돌 괭이, 밀 씨앗 16개, 빵 8개를 받았습니다! 마을 공용 농장에서 농사를 시작하세요.");
+    }
+    interface Action { void run() throws IOException; }
+    void guarded(Player player, Action action) {
+        try { action.run(); }
+        catch (IOException | ArithmeticException | IllegalArgumentException e) {
+            getLogger().log(Level.SEVERE, "Player transaction failed: " + player.getUniqueId(), e);
+            tell(player, "데이터를 처리하지 못했습니다. 관리자에게 문의하세요.");
+        }
     }
     void tell(Player player, String message) { tell(player, Component.text(message, NamedTextColor.WHITE)); }
     void tell(Player player, Component message) {

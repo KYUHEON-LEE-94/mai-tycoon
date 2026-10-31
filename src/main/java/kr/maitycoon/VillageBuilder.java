@@ -14,7 +14,7 @@ import org.bukkit.block.sign.Side;
  */
 final class VillageBuilder {
     static final int RADIUS = 44, BLEND = 10, SPAWN_DZ = 7;
-    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -15;
+    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -15, PLAZA_NPC_X = 9;
     private static final int PLAZA = 12, ROAD = 2, DEPTH = 24, CLEAR_MAX_ABOVE = 80;
     private static final int[][] PLOTS = {{16, 16}, {27, 16}, {16, 27}, {27, 27}};
     private static final Village.Zone CANE = new Village.Zone(-36, 17, -30, 23), CACTUS = new Village.Zone(-28, 17, -22, 23),

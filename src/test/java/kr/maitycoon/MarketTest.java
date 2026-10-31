@@ -38,6 +38,16 @@ class MarketTest {
         market.restore("UNKNOWN", 100, 100);
         assertFalse(market.has("UNKNOWN"));
     }
+    @Test void trailKeepsRecentPricesInOrder() {
+        Market market = market();
+        var random = new Random(3);
+        for (int i = 0; i < 20; i++) market.step(random);
+        List<Integer> trail = market.trail("WHEAT");
+        assertEquals(8, trail.size());
+        assertEquals(market.percent("WHEAT"), trail.get(trail.size() - 1));
+        market.restoreTrail("WHEAT", List.of(999, 100));
+        assertEquals(List.of(180, 100), market.trail("WHEAT"));
+    }
     @Test void rejectsInvalidRules() {
         assertThrows(IllegalArgumentException.class, () -> new Market.Rule(0, 5));
         assertThrows(IllegalArgumentException.class, () -> new Market.Rule(5, 0));
