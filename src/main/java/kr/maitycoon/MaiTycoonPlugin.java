@@ -50,7 +50,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             long landPrice = getConfig().getLong("land.price"), landStep = getConfig().getLong("land.step");
             int landMax = getConfig().getInt("land.max");
             if (landPrice < 1 || landStep < 0 || landMax < 1) throw new IOException("Invalid land settings");
-            lands = new Lands(this, store, village, landPrice, landStep, landMax);
+            long reportDays = getConfig().getLong("land.report-days");
+            if (reportDays < 1) throw new IOException("Invalid land settings");
+            lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L);
             npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
             npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
             npcActions.put("dex", dexMenu::open);
@@ -178,7 +180,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "price" -> prices(player);
                 case "starter" -> starter(player);
                 case "dex" -> dexMenu.open(player);
-                case "land" -> lands.open(player);
+                case "land" -> {
+                    if (args.length >= 2 && args[1].equalsIgnoreCase("member")) lands.memberCommand(player, args);
+                    else lands.open(player);
+                }
                 case "village" -> {
                     if (!village.built()) tell(player, "마을이 아직 지어지지 않았습니다.");
                     else { player.teleport(village.spawn()); tell(player, "마을 광장으로 이동했습니다."); }
@@ -188,7 +193,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     tell(player, "/tycoon starter — 시작 보급품 받기 (1회)");
                     tell(player, "/tycoon price — 현재 작물 시세 보기");
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
-                    tell(player, "/tycoon land — 땅 지도와 청크 구매");
+                    tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
+                    tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
                     tell(player, "/tycoon info — 보유 YD 확인");
                 }
