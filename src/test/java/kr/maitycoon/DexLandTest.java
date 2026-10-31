@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DexLandTest {
     private static Dex dex() {
         return new Dex(Map.of("농사", List.of("WHEAT", "CARROT", "POTATO")), Map.of(
-            1, new Dex.Reward(100, false), 2, new Dex.Reward(0, true)));
+            1, new Dex.Reward(100, 1, false), 2, new Dex.Reward(0, 5, true)));
     }
     @Test void registeringGrantsEachRewardOnce() {
         Dex dex = dex();
@@ -18,6 +18,35 @@ class DexLandTest {
         assertEquals(Set.of(1, 2), second.dexRewards());
         Profile third = dex.register(second, "POTATO");
         assertEquals(100, third.coins());
+    }
+    @Test void rewardCurrenciesStaySeparate() {
+        Dex dex = dex();
+        Profile second = dex.register(dex.register(Profile.empty(), "WHEAT"), "CARROT");
+        assertEquals(100, second.coins());
+        assertEquals(6, second.zcoin());
+        assertThrows(IllegalArgumentException.class, () -> second.spend(101));
+        assertEquals("즈코인 5개 + 땅 구매 이용권", new Dex.Reward(0, 5, true).describe());
+    }
+    @Test void progressSurvivesAddingEntries() {
+        Profile old = dex().register(dex().register(Profile.empty(), "WHEAT"), "CARROT");
+        Dex bigger = new Dex(Map.of("농사", List.of("WHEAT", "CARROT", "POTATO", "BEETROOT")), Map.of(
+            1, new Dex.Reward(100, 1, false), 2, new Dex.Reward(0, 5, true), 3, new Dex.Reward(7, 0, false)));
+        Profile next = bigger.register(old, "POTATO");
+        assertEquals(107, next.coins());
+        assertEquals(6, next.zcoin());
+        assertEquals(Set.of(1, 2, 3), next.dexRewards());
+    }
+    @Test void oldProfileFilesLoadWithoutZcoin(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+        UUID id = UUID.randomUUID();
+        java.nio.file.Files.writeString(directory.resolve(id + ".yml"), "coins: 70\nexperience: 0\nstarter-claimed: true\ndex: [WHEAT]\ndex-rewards: [10]\nland-permit: true\n");
+        var store = new ProfileStore(directory);
+        Profile loaded = store.load(id);
+        assertEquals(70, loaded.coins());
+        assertEquals(0, loaded.zcoin());
+        assertEquals(Set.of("WHEAT"), loaded.dex());
+        assertEquals(Set.of(10), loaded.dexRewards());
+        store.save(id, loaded.claimStarter());
+        assertEquals(loaded, store.load(id));
     }
     @Test void rejectsDuplicateAndUnknownEntries() {
         Dex dex = dex();

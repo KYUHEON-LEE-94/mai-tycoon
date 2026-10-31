@@ -4,8 +4,15 @@ import java.util.*;
 
 /** Collection book: pages of item ids, plus rewards that are granted when a count is reached. */
 public final class Dex {
-    public record Reward(long coins, boolean landPermit) {
-        public Reward { if (coins < 0) throw new IllegalArgumentException("Invalid reward"); }
+    public record Reward(long coins, long zcoin, boolean landPermit) {
+        public Reward { if (coins < 0 || zcoin < 0) throw new IllegalArgumentException("Invalid reward"); }
+        public String describe() {
+            List<String> parts = new ArrayList<>();
+            if (coins > 0) parts.add(coins + " YD");
+            if (zcoin > 0) parts.add("즈코인 " + zcoin + "개");
+            if (landPermit) parts.add("땅 구매 이용권");
+            return String.join(" + ", parts);
+        }
     }
     private final Map<String, List<String>> pages;
     private final NavigableMap<Integer, Reward> rewards;
@@ -25,7 +32,7 @@ public final class Dex {
         if (!has(id)) throw new IllegalArgumentException("Not a dex entry");
         Profile next = profile.collect(id);
         for (var entry : rewards.headMap(next.dex().size(), true).entrySet()) {
-            if (!next.dexRewards().contains(entry.getKey())) next = next.claimReward(entry.getKey(), entry.getValue().coins(), entry.getValue().landPermit());
+            if (!next.dexRewards().contains(entry.getKey())) next = next.claimReward(entry.getKey(), entry.getValue());
         }
         return next;
     }

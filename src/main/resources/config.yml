@@ -66,13 +66,14 @@ dex:
     채광: [COBBLESTONE, COAL, RAW_IRON, RAW_COPPER, RAW_GOLD, REDSTONE, LAPIS_LAZULI, DIAMOND, EMERALD, QUARTZ, AMETHYST_SHARD, OBSIDIAN, FLINT, CLAY_BALL, GLOWSTONE_DUST, NETHERRACK, END_STONE, ANCIENT_DEBRIS]
     사냥: [ROTTEN_FLESH, BONE, STRING, SPIDER_EYE, GUNPOWDER, ENDER_PEARL, BLAZE_ROD, SLIME_BALL, LEATHER, FEATHER, EGG, WHITE_WOOL, BEEF, PORKCHOP, CHICKEN, MUTTON, RABBIT, PHANTOM_MEMBRANE]
     바다·요리: [COD, SALMON, TROPICAL_FISH, PUFFERFISH, NAUTILUS_SHELL, INK_SAC, PRISMARINE_SHARD, BREAD, BAKED_POTATO, COOKED_BEEF, COOKED_PORKCHOP, COOKED_CHICKEN, PUMPKIN_PIE, COOKIE, CAKE, MUSHROOM_STEW, BEETROOT_SOUP, GOLDEN_CARROT]
-  # 달성 개수별 보상. 원본의 10/20/30/50개 구간과 30개 땅 구매 이용권은 따르고, 띵코인은 미구현이라 YD로 대체했습니다.
+  # 달성 개수별 보상. 원본의 10/20/30/50개 구간, 코인 수량, 30개 땅 구매 이용권을 따릅니다.
+  # zcoin(즈코인)은 YD와 별개의 재화입니다. coins(YD)와 72개 구간은 개발용 값입니다.
   rewards:
-    10: {coins: 500}
-    20: {coins: 1500}
-    30: {coins: 3000, land-permit: true}
-    50: {coins: 10000}
-    72: {coins: 30000}
+    10: {coins: 500, zcoin: 1}
+    20: {coins: 1500, zcoin: 5}
+    30: {coins: 3000, zcoin: 5, land-permit: true}
+    50: {coins: 10000, zcoin: 10}
+    72: {coins: 30000, zcoin: 20}
 # 청크 단위 땅. 최대 9개는 원본 기준이고, 가격은 미확인이라 개발용 값입니다.
 # n번째 땅 가격 = price + step × (이미 보유한 땅 수)
 land:

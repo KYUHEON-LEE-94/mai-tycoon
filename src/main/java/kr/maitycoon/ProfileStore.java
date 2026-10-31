@@ -22,7 +22,7 @@ public final class ProfileStore {
             if (!yaml.isLong("coins") && !yaml.isInt("coins")) throw new IOException("Invalid coins");
             if (!yaml.isLong("experience") && !yaml.isInt("experience")) throw new IOException("Invalid experience");
             if (!yaml.isBoolean("starter-claimed")) throw new IOException("Invalid starter flag");
-            return new Profile(yaml.getLong("coins"), yaml.getLong("experience"), yaml.getBoolean("starter-claimed"),
+            return new Profile(yaml.getLong("coins"), yaml.getLong("zcoin"), yaml.getLong("experience"), yaml.getBoolean("starter-claimed"),
                 new HashSet<>(yaml.getStringList("dex")), new HashSet<>(yaml.getIntegerList("dex-rewards")), yaml.getBoolean("land-permit"));
         } catch (InvalidConfigurationException | IllegalArgumentException e) {
             throw new IOException("Invalid profile: " + id, e);
@@ -30,7 +30,9 @@ public final class ProfileStore {
     }
     public void save(UUID id, Profile profile) throws IOException {
         var yaml = new YamlConfiguration();
+        yaml.set("schema", 2);
         yaml.set("coins", profile.coins());
+        yaml.set("zcoin", profile.zcoin());
         yaml.set("experience", profile.experience());
         yaml.set("starter-claimed", profile.starterClaimed());
         yaml.set("dex", new TreeSet<>(profile.dex()).stream().toList());

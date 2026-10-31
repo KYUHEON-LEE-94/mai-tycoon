@@ -127,7 +127,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         if (pages.isEmpty()) throw new IOException("Empty dex");
         Map<Integer, Dex.Reward> rewards = new HashMap<>();
         for (String tier : rewardSection.getKeys(false)) {
-            rewards.put(Integer.parseInt(tier), new Dex.Reward(rewardSection.getLong(tier + ".coins"), rewardSection.getBoolean(tier + ".land-permit")));
+            rewards.put(Integer.parseInt(tier), new Dex.Reward(rewardSection.getLong(tier + ".coins"), rewardSection.getLong(tier + ".zcoin"), rewardSection.getBoolean(tier + ".land-permit")));
         }
         return new Dex(pages, rewards);
     }
@@ -193,7 +193,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         if (!player.hasPermission("maitycoon.play")) return true;
         try {
             switch (action) {
-                case "info" -> tell(player, "보유 YD: " + store.load(player.getUniqueId()).coins());
+                case "info" -> {
+                    Profile profile = store.load(player.getUniqueId());
+                    tell(player, "보유 YD: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개");
+                }
                 case "price" -> prices(player);
                 case "starter" -> starter(player);
                 case "dex" -> dexMenu.open(player);
@@ -213,7 +216,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
-                    tell(player, "/tycoon info — 보유 YD 확인");
+                    tell(player, "/tycoon info — 보유 YD와 즈코인 확인");
                 }
             }
         } catch (IOException | ArithmeticException e) {

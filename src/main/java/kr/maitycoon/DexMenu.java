@@ -56,7 +56,7 @@ final class DexMenu implements Listener {
             holder.entries.put(BODY_START + i, item);
             inventory.setItem(BODY_START + i, entry(item, profile, player));
         }
-        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " YD", NamedTextColor.GOLD), List.of(Ui.line("보유 금액", NamedTextColor.GRAY))));
+        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " YD", NamedTextColor.GOLD), List.of(Ui.line("즈코인 " + profile.zcoin() + "개", NamedTextColor.AQUA))));
         inventory.setItem(PROGRESS, progress(profile));
     }
     private ItemStack entry(Material item, Profile profile, Player player) {
@@ -72,7 +72,7 @@ final class DexMenu implements Listener {
         List<Component> lore = new ArrayList<>();
         for (var reward : dex.rewards().entrySet()) {
             boolean claimed = profile.dexRewards().contains(reward.getKey());
-            String text = reward.getKey() + "개: " + reward.getValue().coins() + " YD" + (reward.getValue().landPermit() ? " + 땅 구매 이용권" : "");
+            String text = reward.getKey() + "개: " + reward.getValue().describe();
             lore.add(Ui.line((claimed ? "✔ " : "· ") + text, claimed ? NamedTextColor.GREEN : NamedTextColor.GRAY));
         }
         return Ui.icon(Material.WRITABLE_BOOK, Ui.line("도감 " + profile.dex().size() + " / " + dex.total(), NamedTextColor.YELLOW), lore);
@@ -93,7 +93,7 @@ final class DexMenu implements Listener {
         for (int tier : after.dexRewards()) {
             if (before.dexRewards().contains(tier)) continue;
             Dex.Reward reward = dex.rewards().get(tier);
-            plugin.tell(player, "도감 " + tier + "개 달성! +" + reward.coins() + " YD" + (reward.landPermit() ? ", 땅 구매 이용권 획득" : ""));
+            plugin.tell(player, "도감 " + tier + "개 달성! " + reward.describe());
         }
     }
     @EventHandler
