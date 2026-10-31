@@ -94,6 +94,14 @@ lamp:
 auto-plant:
   zcoin-price: 1
   uses: 1000
+# 트랙터(실험 기능, 기본 꺼짐). 원본 존재와 200코인 가격만 자료에 있고 범위와 속도는 미확인이라 임시값입니다.
+tractor:
+  enabled: false
+  zcoin-price: 200
+  # 클릭한 칸을 중심으로 사방 몇 칸을 수확할지
+  radius: 4
+  # 틱당 수확 칸 수. 높이면 서버 부하가 늘어납니다.
+  blocks-per-tick: 2
 # 청크(16×16블록) 단위 땅. 1인당 10개이고, 가격은 미확인이라 개발용 값입니다.
 # n번째 땅 가격 = price + step × (이미 보유한 땅 수)
 land:

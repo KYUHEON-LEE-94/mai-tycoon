@@ -375,6 +375,11 @@ final class Lands implements Listener {
         var role = registry.role(key(block), player.getUniqueId());
         return role != LandRegistry.Role.VISITOR;
     }
+    /** Claimed land the player works on. Tractors never run on open ground or anyone else's land. */
+    boolean mayTractor(Player player, Block block) {
+        var role = registry.role(key(block), player.getUniqueId());
+        return role == LandRegistry.Role.OWNER || role == LandRegistry.Role.WORKER;
+    }
     boolean allowsPlanting(Player player, Block block) { return !refused(player, block, LandRegistry.Action.PLANT); }
     private boolean refused(Player player, Block block, LandRegistry.Action action) {
         if (registry.allows(key(block), player.getUniqueId(), action) || player.hasPermission("maitycoon.admin")) return false;

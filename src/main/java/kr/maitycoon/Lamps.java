@@ -107,7 +107,7 @@ final class Lamps implements Listener {
     public void onHarvest(BlockBreakEvent event) {
         Block block = event.getBlock();
         Player player = event.getPlayer();
-        if (!CROPS.containsKey(block.getType()) || Lands.immature(block) || player.getGameMode() == GameMode.CREATIVE) return;
+        if (!CROPS.containsKey(block.getType()) || Lands.immature(block) || player.getGameMode() == GameMode.CREATIVE || plugin.tractorHarvesting()) return;
         LifeLamp.Option option = option(player.getInventory().getItemInMainHand());
         if (option == null) return;
         int bonus = option.bonus(ThreadLocalRandom.current());

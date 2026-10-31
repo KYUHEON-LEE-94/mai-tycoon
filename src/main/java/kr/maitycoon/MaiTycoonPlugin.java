@@ -29,6 +29,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private CustomCrops customCrops;
     private Lamps lamps;
     private MiniMap miniMap;
+    private Tractors tractors;
     private AutoPlanting autoPlanting;
     private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
@@ -91,7 +92,15 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(miniMap, this);
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
             if (plantPrice < 1 || plantUses < 1) throw new IOException("Invalid auto-plant settings");
-            autoPlanting = new AutoPlanting(this, store, village, lands, plantPrice, plantUses);
+            boolean tractorOn = getConfig().getBoolean("tractor.enabled");
+            long tractorPrice = getConfig().getLong("tractor.zcoin-price");
+            int tractorRadius = getConfig().getInt("tractor.radius"), tractorPerTick = getConfig().getInt("tractor.blocks-per-tick");
+            if (tractorPrice < 1 || tractorRadius < 1 || tractorRadius > 16 || tractorPerTick < 1) throw new IOException("Invalid tractor settings");
+            autoPlanting = new AutoPlanting(this, store, village, lands, plantPrice, plantUses, tractorOn ? tractorPrice : 0);
+            if (tractorOn) {
+                tractors = new Tractors(this, store, village, lands, tractorRadius, tractorPerTick);
+                getServer().getPluginManager().registerEvents(tractors, this);
+            }
             getServer().getPluginManager().registerEvents(autoPlanting, this);
             try {
                 resourcePack = new ResourcePack(this, shop, getConfig().getString("pack.host", "127.0.0.1"), getConfig().getInt("pack.port"));
@@ -174,6 +183,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         Component title = Component.text(text, NamedTextColor.GOLD);
         return shop.drawn(player) ? title.append(new ShopTitle().spaceRight(BANNER_SHIFT).build()) : title;
     }
+    boolean tractorHarvesting() { return tractors != null && tractors.harvesting(); }
     boolean packDrawn(Player player) { return shop.drawn(player); }
     Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
     void openLandTool(Player player, boolean lamp) throws IOException {
