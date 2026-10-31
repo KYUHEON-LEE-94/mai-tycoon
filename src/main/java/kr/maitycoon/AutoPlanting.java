@@ -71,7 +71,7 @@ final class AutoPlanting implements Listener {
         holder.inventory.setItem(BUY, Ui.icon(Material.PAPER, Ui.line(uses + "회 구매", NamedTextColor.GOLD), List.of(
             Ui.line("즈코인 " + price + "개", NamedTextColor.AQUA), Ui.line("보유 즈코인 " + profile.zcoin() + "개", NamedTextColor.GRAY))));
         if (tractorPrice > 0) holder.inventory.setItem(TRACTOR, Ui.icon(Material.MINECART, Ui.line(profile.tractor() ? "트랙터 보유 중" : "트랙터 구매", NamedTextColor.GOLD), List.of(
-            profile.tractor() ? Ui.line("괭이를 들고 Shift+우클릭으로 주변을 수확합니다.", NamedTextColor.GRAY) : Ui.line("즈코인 " + tractorPrice + "개", NamedTextColor.AQUA),
+            profile.tractor() ? Ui.line("괭이를 들고 웅크린 채 우클릭하면 주변을 수확합니다.", NamedTextColor.GRAY) : Ui.line("즈코인 " + tractorPrice + "개", NamedTextColor.AQUA),
             Ui.line("내 땅, 작업자 땅, 공용 농장에서 동작합니다.", NamedTextColor.GRAY))));
     }
     private void buy(Player player) throws IOException {
@@ -89,7 +89,7 @@ final class AutoPlanting implements Listener {
         if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
         if (profile.zcoin() < tractorPrice) { plugin.tell(player, "즈코인이 부족합니다. 필요 " + tractorPrice + " / 보유 " + profile.zcoin()); return; }
         plugin.transact(player, "tractor", "-" + tractorPrice + " zcoin", () -> store.save(id, profile.buyTractor(tractorPrice)));
-        plugin.tell(player, "트랙터를 구매했습니다. 괭이를 들고 Shift+우클릭으로 사용합니다.");
+        plugin.tell(player, "트랙터를 구매했습니다. 괭이를 들고 웅크린 채 우클릭하면 사용합니다.");
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {

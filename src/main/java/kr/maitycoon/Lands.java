@@ -237,7 +237,7 @@ final class Lands implements Listener {
         try {
             if (!store.load(player.getUniqueId()).landPermit()) return "구매 가능한 땅 · 땅 구매 이용권 필요";
         } catch (IOException e) { return null; }
-        return String.format("[Shift 두 번] 이 땅 구매 · %,d 골드", LandRegistry.price(price, step, owned));
+        return String.format(MaiTycoonPlugin.BUY_PROMPT + " 이 땅 구매 · %,d 골드", LandRegistry.price(price, step, owned));
     }
     void refreshBanners() {
         for (Player player : plugin.getServer().getOnlinePlayers()) {
@@ -287,7 +287,6 @@ final class Lands implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onHotkey(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
-        plugin.getLogger().info("Hotkey check: swap key from " + player.getName() + " sneaking=" + player.isSneaking());
         if (!player.isSneaking()) return;
         event.setCancelled(true);
         hotkey(player);
@@ -301,7 +300,6 @@ final class Lands implements Listener {
         Long last = lastSneak.put(player.getUniqueId(), now);
         if (last == null || now - last > DOUBLE_SNEAK_MILLIS) return;
         lastSneak.remove(player.getUniqueId());
-        plugin.getLogger().info("Hotkey check: double sneak from " + player.getName());
         hotkey(player);
     }
     private void hotkey(Player player) {
