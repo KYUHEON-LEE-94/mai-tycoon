@@ -16,7 +16,7 @@ final class VillageBuilder {
     static final int RADIUS = 44, BLEND = 10, SPAWN_DZ = 7;
     static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -14, STALL_BACK = -21, STALL_FRONT = -13;
     /** Doors of the buildings that hold a merchant, and the row the merchant stands on behind the counter. */
-    static final int HALL_DOOR_X = -26, EAST_DOOR_X = 22, HALL_NPC_Z = -11, LAND_NPC_Z = -10, SOUTH_NPC_Z = 10;
+    static final int HALL_DOOR_X = -26, EAST_DOOR_X = 22, HALL_NPC_Z = -11, SOUTH_NPC_Z = 10;
     private static final int PLAZA = 12, ROAD = 2, DEPTH = 24, CLEAR_MAX_ABOVE = 80;
     private static final int[][] PLOTS = {{16, 16}, {27, 16}, {16, 27}, {27, 27}};
     private static final Village.Zone CANE = new Village.Zone(-36, 17, -30, 23), CACTUS = new Village.Zone(-28, 17, -22, 23),
@@ -224,8 +224,7 @@ final class VillageBuilder {
     void buildings() {
         building(-36, -15, -16, -5, 5, Material.DEEPSLATE_TILE_STAIRS, BlockFace.SOUTH, HALL_DOOR_X, "마을회관");
         service(-35, -17, HALL_NPC_Z + 1, -14, -5, HALL_DOOR_X, List.of(Material.BOOKSHELF, Material.BOOKSHELF, Material.LECTERN));
-        building(16, -13, 24, -5, 4, Material.BRICK_STAIRS, BlockFace.SOUTH, EAST_DOOR_X, "토지 사무소");
-        service(17, 23, LAND_NPC_Z + 1, -12, -5, EAST_DOOR_X, List.of(Material.CARTOGRAPHY_TABLE, Material.BOOKSHELF));
+        building(16, -13, 24, -5, 4, Material.BRICK_STAIRS, BlockFace.SOUTH, EAST_DOOR_X, "민가");
         building(28, -13, 36, -5, 4, Material.DARK_OAK_STAIRS, BlockFace.SOUTH, 34, "민가");
         building(16, 5, 24, 12, 4, Material.SPRUCE_STAIRS, BlockFace.NORTH, EAST_DOOR_X, "가구 상점");
         service(17, 23, SOUTH_NPC_Z - 1, 11, 5, EAST_DOOR_X, List.of(Material.CHEST, Material.BOOKSHELF, Material.BARREL));

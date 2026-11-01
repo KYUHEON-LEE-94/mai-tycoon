@@ -97,7 +97,6 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             npcActions.put("furniture", player -> shop.open(player, Shop.Kind.FURNITURE));
             npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
             npcActions.put("dex", dexMenu::open);
-            npcActions.put("land", lands::open);
             Objects.requireNonNull(getCommand("tycoon")).setExecutor(this);
             Objects.requireNonNull(getCommand("도움말")).setExecutor((sender, command, label, args) -> {
                 if (sender instanceof Player player) helpMenu.open(player);
@@ -197,6 +196,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         catch (IOException e) { getLogger().log(Level.SEVERE, "Cannot save farm index", e); }
     }
     void openFarmStatus(Player player) { farmStatus.open(player); }
+    void openLand(Player player) { lands.open(player); }
     private Market loadMarket() throws IOException {
         var section = getConfig().getConfigurationSection("crops");
         if (section == null) throw new IOException("Missing crops");

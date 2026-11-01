@@ -21,7 +21,7 @@ final class HelpMenu implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int DEX_BUTTON = 48, WALLET_BUTTON = 50;
+    private static final int DEX_BUTTON = 48, LAND_BUTTON = 49, WALLET_BUTTON = 50;
     private final MaiTycoonPlugin plugin;
     HelpMenu(MaiTycoonPlugin plugin) { this.plugin = plugin; }
     private static Component key(String keybind) { return Component.keybind(keybind, NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false); }
@@ -56,11 +56,11 @@ final class HelpMenu implements Listener {
         inventory.setItem(30, entry(Material.GLOWSTONE_DUST, "생활 램프와 자동 심기", List.of(
             text("램프 상인에게 골드로 램프를 삽니다."),
             text("도구를 들고 램프 상점의 램프 사용을 누르면 능력이 붙습니다."),
-            text("자동 심기는 토지 관리인의 농장 관리에서 켭니다."))));
+            text("자동 심기는 아래 내 땅 버튼의 농장 관리에서 켭니다."))));
         inventory.setItem(32, entry(Material.CHEST, "상인", List.of(
             text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽 상점에 함께 있습니다."),
             text("건축 자재 상인과 가구 상인은 남쪽 도로변 상점에 있습니다."),
-            text("도감 사서와 안내원은 마을회관, 토지 관리인은 토지 사무소에 있습니다."),
+            text("도감 사서와 안내원은 마을회관에 있습니다."),
             text("NPC를 우클릭하면 메뉴가 열립니다."))));
         inventory.setItem(34, entry(Material.PAPER, "명령어", List.of(
             text("/도움말  이 화면"),
@@ -71,6 +71,7 @@ final class HelpMenu implements Listener {
             text("/tycoon starter  시작 보급품"),
             text("/tycoon land member add 이름  내 땅 작업자 추가"))));
         inventory.setItem(DEX_BUTTON, Ui.icon(Material.BOOK, Ui.line("수집 도감 열기", NamedTextColor.YELLOW), List.of()));
+        inventory.setItem(LAND_BUTTON, Ui.icon(Material.GRASS_BLOCK, Ui.line("내 땅 열기", NamedTextColor.YELLOW), List.of(text("땅 지도와 농장 관리를 엽니다."), text("/tycoon land 와 같습니다."))));
         inventory.setItem(WALLET_BUTTON, Ui.icon(Material.GOLD_INGOT, Ui.line("지갑 열기", NamedTextColor.YELLOW), List.of(text("잔액과 최근 거래를 보고 골드를 보냅니다."), text("돈은 계정에 있어서 들고 다니지 않습니다."))));
         player.openInventory(inventory);
     }
@@ -80,6 +81,7 @@ final class HelpMenu implements Listener {
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (event.getRawSlot() == DEX_BUTTON) plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openDex(player));
+        else if (event.getRawSlot() == LAND_BUTTON) plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openLand(player));
         else if (event.getRawSlot() == WALLET_BUTTON) plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openWallet(player));
     }
     @EventHandler
