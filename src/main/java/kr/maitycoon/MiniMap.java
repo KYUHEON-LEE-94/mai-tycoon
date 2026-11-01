@@ -6,6 +6,7 @@ import java.util.logging.Level;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -13,9 +14,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-/** The always-on display: a north-up map, where other players appear, and the balance. Without the pack only the balance shows. */
+/** The always-on display: a north-up map with every other player and their name, and the balance. Without the pack only the balance shows. */
 final class MiniMap implements Listener {
-    private static final int BLOCKS_PER_CELL = 8, RADIUS = MiniMapTitle.CELLS / 2, UNKNOWN = 0x1A1816, ME = 0xFFFFFF, OTHER = 0xFFE040;
+    private static final int BLOCKS_PER_CELL = 8, RADIUS = MiniMapTitle.RADIUS, UNKNOWN = 0x1A1816, ME = 0xFFFFFF, METRES_ROUNDED_TO = 10;
     private static final long CELL_LIFETIME = 30_000;
     private record Cached(int color, long at) {}
     private final MaiTycoonPlugin plugin;
@@ -59,15 +60,13 @@ final class MiniMap implements Listener {
             for (int row = 0; row < cells.length; row++) for (int column = 0; column < cells.length; column++) {
                 cells[row][column] = color(world, centerX + column - RADIUS, centerZ + row - RADIUS, now);
             }
-            for (Player other : world.getPlayers()) {
-                int column = cell(other.getLocation().getBlockX()) - centerX + RADIUS, row = cell(other.getLocation().getBlockZ()) - centerZ + RADIUS;
-                if (row >= 0 && row < cells.length && column >= 0 && column < cells.length) cells[row][column] = OTHER;
-            }
+            List<MiniMapTitle.Marker> markers = markers(player, centerX, centerZ);
+            for (MiniMapTitle.Marker marker : markers) cells[marker.row()][marker.column()] = MiniMapTitle.OTHER;
             cells[RADIUS][RADIUS] = ME;
-            String signature = coins + Arrays.deepToString(cells);
+            String signature = coins + Arrays.deepToString(cells) + markers;
             if (signature.equals(painted.get(id))) continue;
             painted.put(id, signature);
-            Component title = MiniMapTitle.render(cells, coins);
+            Component title = MiniMapTitle.render(cells, coins, markers);
             BossBar bar = bars.get(id);
             if (bar != null) bar.name(title);
             else {
@@ -76,6 +75,19 @@ final class MiniMap implements Listener {
                 player.showBossBar(bar);
             }
         }
+    }
+    /** Everyone in this world, however far. Sorted so a name keeps its line while people move. Spectators stay hidden, as they do in the world. */
+    private List<MiniMapTitle.Marker> markers(Player player, int centerX, int centerZ) {
+        List<Player> others = new ArrayList<>(player.getWorld().getPlayers());
+        others.removeIf(other -> other.equals(player) || other.getGameMode() == GameMode.SPECTATOR || !player.canSee(other));
+        others.sort(Comparator.comparing(Player::getName));
+        List<MiniMapTitle.Marker> markers = new ArrayList<>();
+        for (Player other : others) {
+            Location at = other.getLocation();
+            int metres = (int) (at.distance(player.getLocation()) / METRES_ROUNDED_TO) * METRES_ROUNDED_TO;
+            markers.add(MiniMapTitle.pin(cell(at.getBlockX()) - centerX, cell(at.getBlockZ()) - centerZ, metres, other.getName()));
+        }
+        return markers;
     }
     /** A file that cannot be read keeps the last known balance on screen rather than showing a wrong zero. */
     private long coins(Player player) {

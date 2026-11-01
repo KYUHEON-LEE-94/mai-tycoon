@@ -617,6 +617,13 @@ public class GeneratePack {
             text("assets/maitycoon/font/mm" + row + ".json", "{\"providers\":[" + bitmap("minimap_cell.png", MiniMapTitle.CELL_SIZE, MiniMapTitle.CELL_SIZE - row * MiniMapTitle.CELL_SIZE, "\\ue230")
                 + ",{\"type\":\"space\",\"advances\":{\"\\ue231\":-1}}]}");
         }
+        png("assets/maitycoon/textures/gui/minimap_names.png", nameSheet());
+        var rows = new StringJoiner("\",\"");
+        for (int start = 0; start < MiniMapTitle.NAME_CHARS.length(); start += MiniMapTitle.NAME_COLUMNS) rows.add(MiniMapTitle.NAME_CHARS.substring(start, start + MiniMapTitle.NAME_COLUMNS));
+        for (int row = 0; row < MiniMapTitle.CELLS; row++) {
+            int ascent = MiniMapTitle.CELL_SIZE - row * MiniMapTitle.CELL_SIZE + (MiniMapTitle.NAME_HEIGHT - MiniMapTitle.CELL_SIZE) / 2;
+            text("assets/maitycoon/font/mn" + row + ".json", "{\"providers\":[" + bitmap("minimap_names.png", MiniMapTitle.NAME_HEIGHT, ascent, rows.toString()) + "]}");
+        }
         // Bitmap glyphs over 256px are dropped by the client, so the frame is drawn at 3x rather than SCALE.
         int frameScale = 3;
         var frame = new BufferedImage(MINIMAP_FRAME * frameScale, MINIMAP_FRAME * frameScale, BufferedImage.TYPE_INT_ARGB);
@@ -628,6 +635,31 @@ public class GeneratePack {
         g.drawRect(1, 1, frame.getWidth() - 3, frame.getHeight() - 3);
         g.dispose();
         png("assets/maitycoon/textures/gui/minimap_frame.png", frame);
+    }
+    /** Names sit on bright terrain, so every letter has a dark edge. Fixed-width cells let the server know a name's width. */
+    static BufferedImage nameSheet() {
+        int scale = 3, w = MiniMapTitle.NAME_WIDTH * scale, h = MiniMapTitle.NAME_HEIGHT * scale, columns = MiniMapTitle.NAME_COLUMNS;
+        String chars = MiniMapTitle.NAME_CHARS;
+        var sheet = new BufferedImage(columns * w, chars.length() / columns * h, BufferedImage.TYPE_INT_ARGB);
+        Font font = new Font("Nanum Gothic", Font.BOLD, 6 * scale);
+        for (int i = 0; i < chars.length(); i++) {
+            int x = i % columns * w, y = i / columns * h;
+            Graphics2D g = paint(sheet);
+            g.setClip(x, y, w, h);
+            g.setFont(font);
+            String letter = chars.substring(i, i + 1);
+            int width = g.getFontMetrics().stringWidth(letter);
+            double squeeze = Math.min(1, (w - 2.0) / Math.max(1, width));
+            g.translate(x + (w - width * squeeze) / 2, y + 6.0 * scale);
+            g.scale(squeeze, 1);
+            g.setColor(new Color(0x16120F));
+            for (int[] step : new int[][]{{-2, 0}, {2, 0}, {0, -2}, {0, 2}}) g.drawString(letter, step[0], step[1]);
+            g.setColor(Color.WHITE);
+            g.drawString(letter, 0, 0);
+            g.dispose();
+            sheet.setRGB(x + w - 1, y + h - 1, 0x01FFFFFF);
+        }
+        return sheet;
     }
     static BufferedImage tabHighlight() {
         var image=new BufferedImage(18*SCALE,17*SCALE,BufferedImage.TYPE_INT_ARGB);
