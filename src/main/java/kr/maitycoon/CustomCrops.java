@@ -217,6 +217,7 @@ final class CustomCrops implements Listener {
             int yield = ThreadLocalRandom.current().nextInt(crop.minYield(), crop.maxYield() + 1);
             block.getWorld().dropItemNaturally(at, catalog.item(crop.id(), yield));
             block.getWorld().dropItemNaturally(at, catalog.item(crop.seedId(), ThreadLocalRandom.current().nextInt(1, 3)));
+            plugin.lampHarvest(event.getPlayer(), block, catalog.item(crop.id(), 1), catalog.item(crop.seedId(), 1));
         } else {
             block.getWorld().dropItemNaturally(at, catalog.item(crop.seedId(), 1));
             event.getPlayer().sendActionBar(Component.text("덜 자라서 씨앗만 돌려받았습니다.", NamedTextColor.GRAY));

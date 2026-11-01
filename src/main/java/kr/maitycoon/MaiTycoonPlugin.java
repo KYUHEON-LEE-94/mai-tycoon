@@ -38,8 +38,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private Tractors tractors;
     private AutoPlanting autoPlanting;
     private TransactionJournal journal;
+    private WalletLog walletLog;
+    private WalletMenu wallet;
     private long marketInterval, nextMarketChange;
-    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp", "autoplant");
+    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "wallet", "village", "dex", "land", "lamp", "autoplant");
     private static final String CUSTOM_CATEGORY = "특산물", ROUND_KEY = "stats-round";
     private static final int REPORT_ROUNDS = 144, REPORT_ITEMS = 10;
     private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
@@ -58,6 +60,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             for (var entry : journal.interrupted()) {
                 getLogger().warning("Interrupted trade " + entry.id() + " for " + entry.player() + " at " + entry.createdAt() + ": " + entry.type() + " " + entry.detail());
             }
+            walletLog = new WalletLog(getDataFolder().toPath().resolve("wallet"));
+            wallet = new WalletMenu(this, store, journal, walletLog);
+            getServer().getPluginManager().registerEvents(wallet, this);
             retireOldSettings();
             catalog = new Catalog(this, getConfig().getConfigurationSection("custom-crops.crops"));
             market = loadMarket();
@@ -232,6 +237,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     }
     boolean tractorHarvesting() { return tractors != null && tractors.harvesting(); }
     boolean packDrawn(Player player) { return shop.drawn(player); }
+    boolean wild(org.bukkit.block.Block block) { return lands.wild(block); }
+    void lampHarvest(Player player, org.bukkit.block.Block block, org.bukkit.inventory.ItemStack crop, org.bukkit.inventory.ItemStack seed) { lamps.harvest(player, block, crop, seed); }
     Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
     void openLandTool(Player player, boolean lamp) throws IOException {
         if (lamp) lamps.open(player);
@@ -381,6 +388,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "dex" -> dexMenu.open(player);
                 case "help" -> helpMenu.open(player);
                 case "lamp" -> lamps.open(player);
+                case "wallet" -> wallet.open(player);
                 case "autoplant" -> autoPlanting.open(player);
                 case "land" -> {
                     if (args.length >= 2 && args[1].equalsIgnoreCase("member")) lands.memberCommand(player, args);
@@ -399,11 +407,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     player.sendMessage(Component.text("[마이 타이쿤] ", NamedTextColor.GREEN).append(Component.keybind("key.swapOffhand", NamedTextColor.YELLOW)).append(Component.text(" 키를 누르면 도감이 열립니다. 구매할 수 있는 땅에서는 구매 화면이 열립니다. 손 바꾸기는 웅크린 채 누르세요.", NamedTextColor.WHITE)));
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
-                    tell(player, "/tycoon lamp — 생활 램프 구매, 손에 든 괭이에 적용");
+                    tell(player, "/tycoon lamp — 생활 램프 구매, 손에 든 도구에 적용");
                     tell(player, "/tycoon autoplant — 자동 심기 설정");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
                     tell(player, "/tycoon info — 보유 골드와 즈코인 확인");
+                    tell(player, "/tycoon wallet — 지갑, 최근 거래, 골드 보내기");
                 }
             }
         } catch (IOException | ArithmeticException e) {
@@ -512,10 +521,21 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
      */
     void transact(Player player, String type, String detail, Action action) throws IOException { transact(player, type, detail, id -> action.run()); }
     void transact(Player player, String type, String detail, Trade trade) throws IOException {
+        Profile before = store.load(player.getUniqueId());
         String id = journal.begin(player.getUniqueId(), type, detail);
         trade.run(id);
         player.saveData();
         journal.finish(id);
+        logWallet(player.getUniqueId(), type, before, store.load(player.getUniqueId()));
+    }
+    void openWallet(Player player) { guarded(player, () -> wallet.open(player)); }
+    /** The trade is already final here, so a log that cannot be written only leaves a gap in the wallet screen. */
+    void logWallet(UUID id, String type, Profile before, Profile after) {
+        long now = System.currentTimeMillis();
+        try {
+            if (before.coins() != after.coins()) walletLog.add(id, new WalletLog.Line(now, type, "골드", before.coins(), after.coins()));
+            if (before.zcoin() != after.zcoin()) walletLog.add(id, new WalletLog.Line(now, type, "즈코인", before.zcoin(), after.zcoin()));
+        } catch (IOException e) { getLogger().log(Level.WARNING, "Cannot write wallet log for " + id, e); }
     }
     boolean survival(Player player) {
         if (player.getGameMode() == GameMode.SURVIVAL || player.hasPermission("maitycoon.admin")) return true;

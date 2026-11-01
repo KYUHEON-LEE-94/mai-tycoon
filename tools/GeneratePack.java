@@ -27,11 +27,12 @@ public class GeneratePack {
 
     public static void main(String[] args) throws Exception {
         System.setProperty("java.awt.headless", "true");
-        backgroundTiles("sell", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "특산"), "모두 판매", new Color(0x3F8F4F)));
-        backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "비료", "특산"), "상품 클릭 · 구매", new Color(0x3F6C42)));
+        backgroundTiles("sell", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "특산"), GOLD));
+        backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "비료", "특산"), GREEN));
         backgroundTiles("panel", panel());
-        backgroundTiles("furniture", background("가구 상점", List.of("전체", "침대", "조명", "수납", "장식"), "상품 클릭 · 구매", new Color(0x3F6C42)));
-        backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식", "색상"), "상품 클릭 · 구매", new Color(0x3F6C42)));
+        backgroundTiles("lamp", lampScreen());
+        backgroundTiles("furniture", background("가구 상점", List.of("전체", "침대", "조명", "수납", "장식"), GOLD));
+        backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식", "색상"), GOLD));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
         npcSkins();
         miniMapFonts();
@@ -118,18 +119,22 @@ public class GeneratePack {
         if(g.getFontMetrics().stringWidth(name)>47*SCALE)g.setFont(font(5,true));
         g.drawString(name,0,6*SCALE);g.dispose();image.setRGB(48*SCALE-1,7*SCALE-1,0x01FFFFFF);return image;
     }
-    static BufferedImage background(String title, List<String> tabs, String action, Color actionColor) {
+    /** Colours of a shop screen. The seed shop is green so it cannot be mistaken for the crop shop beside it. */
+    record Theme(Color base, Color head, Color accent, Color card, Color edge) {}
+    static final Theme GOLD = new Theme(new Color(0x211E1C), new Color(0x322921), new Color(0xE9D49C), new Color(0x302B29), new Color(0x675B4B));
+    static final Theme GREEN = new Theme(new Color(0x1C211B), new Color(0x26361F), new Color(0xB7D88C), new Color(0x2A332A), new Color(0x566B4A));
+    static BufferedImage background(String title, List<String> tabs, Theme theme) {
         var image=new BufferedImage(WIDTH*SCALE,HEIGHT*SCALE,BufferedImage.TYPE_INT_ARGB);
         Graphics2D g=paint(image);
-        box(g,new Color(0x211E1C),0,0,WIDTH,HEIGHT,0);
-        box(g,new Color(0x322921),0,0,WIDTH,14,0);
-        g.setColor(new Color(0xE9D49C));g.fillRect(0,14*SCALE,WIDTH*SCALE,SCALE/2);
+        box(g,theme.base(),0,0,WIDTH,HEIGHT,0);
+        box(g,theme.head(),0,0,WIDTH,14,0);
+        g.setColor(theme.accent());g.fillRect(0,14*SCALE,WIDTH*SCALE,SCALE/2);
         g.setFont(font(8,true));g.drawString(title,7*SCALE,10*SCALE);
         for(int row=0;row<ShopLayout.ROWS;row++)for(int col=0;col<2;col++) {
             int x=7+col*90,y=TOP+row*SLOT-1;
-            box(g,new Color(0x302B29),x,y,72,17,0);
-            outline(g,new Color(0x675B4B),x,y,72,17,0);
-            box(g,new Color(0xE9D49C),x,y,72,1,0);
+            box(g,theme.card(),x,y,72,17,0);
+            outline(g,theme.edge(),x,y,72,17,0);
+            box(g,theme.accent(),x,y,72,1,0);
             outline(g,new Color(0x8D8276),x+1,y+1,17,15,0);
             box(g,new Color(0x242322),x+40,y+8,31,9,0);
             outline(g,new Color(0x887D70),x+40,y+8,31,9,0);
@@ -341,6 +346,46 @@ public class GeneratePack {
         box(g,fill,x,y,w,h,1);
         outline(g,new Color(0x887D70),x,y,w,h,1);
     }
+    /** Target, current option and lamp stock on top, the options the tool can get below, three buttons at the bottom. */
+    static BufferedImage lampScreen() {
+        var image=new BufferedImage(WIDTH*SCALE,HEIGHT*SCALE,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=paint(image);
+        Color accent=new Color(0xE9D49C);
+        box(g,new Color(0x211E1C),0,0,WIDTH,HEIGHT,0);
+        box(g,new Color(0x3A2A18),0,0,WIDTH,14,0);
+        g.setColor(accent);g.fillRect(0,14*SCALE,WIDTH*SCALE,SCALE/2);
+        g.setFont(font(8,true));g.drawString("생활 램프",7*SCALE,10*SCALE);
+        String[] labels={"대상 도구","현재 능력","보유 램프"};
+        int[] columns={1,4,7};
+        for(int i=0;i<3;i++){
+            int x=7+columns[i]*18;
+            box(g,new Color(0x302B29),x-14,16,46,38,0);
+            outline(g,new Color(0x675B4B),x-14,16,46,38,0);
+            box(g,accent,x-14,16,46,1,0);
+            centered(g,labels[i],font(5,true),CREAM,x+9,26);
+            box(g,new Color(0x393632),x,35,18,18,0);
+            box(g,new Color(0x2A2725),x+1,36,16,16,0);
+            outline(g,accent,x,35,18,18,0);
+        }
+        centered(g,"이 도구에 붙을 수 있는 능력",font(5,true),accent,88,63);
+        for(int row=3;row<5;row++)for(int col=0;col<9;col++){
+            box(g,new Color(0x393632),7+col*18,17+row*18,18,18,0);
+            box(g,new Color(0x2A2725),8+col*18,18+row*18,16,16,0);
+        }
+        button(g,7,107,53,19,new Color(0x4A3A1E));
+        centered(g,"램프 구매",font(5,true),CREAM,43,113);
+        button(g,61,107,53,19,new Color(0x3F6C42));
+        centered(g,"적용",font(7,true),CREAM,97,116.5);
+        button(g,115,107,54,19,new Color(0x3A332E));
+        centered(g,"닫기",font(7,true),CREAM,151,116.5);
+        box(g,new Color(0x181818),3,130,170,89,0);
+        for(int row=0;row<4;row++)for(int col=0;col<9;col++){
+            int y=row==3?198:140+row*18;
+            box(g,new Color(0x393632),7+col*18,y-1,18,18,0);
+            box(g,new Color(0x252423),8+col*18,y,16,16,0);
+        }
+        g.dispose();return image;
+    }
     /** Dark panel with a header line and one well per chest slot, for every menu without its own layout. */
     static BufferedImage panel() {
         var image=new BufferedImage(WIDTH*SCALE,HEIGHT*SCALE,BufferedImage.TYPE_INT_ARGB);
@@ -429,10 +474,10 @@ public class GeneratePack {
     }
     static String guiFont() {
         var providers = new StringJoiner(",");
-        for (int kind = 0; kind < 5; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
+        for (int kind = 0; kind < 6; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
             int h = Math.min(TILE_H, HEIGHT - row * TILE_H);
-            providers.add(bitmap(List.of("sell", "buy", "build", "panel", "furniture").get(kind) + "_" + row + "_" + col + ".png", h,
-                13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900).get(kind) + row * 4 + col)));
+            providers.add(bitmap(List.of("sell", "buy", "build", "panel", "furniture", "lamp").get(kind) + "_" + row + "_" + col + ".png", h,
+                13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900, 0xE500).get(kind) + row * 4 + col)));
         }
         providers.add(bitmap("tab.png", 17, 13 - 90, "\\ue210"));
         providers.add(bitmap("minimap_frame.png", MINIMAP_FRAME, MINIMAP_TOP - 2, "\\ue221"));
@@ -445,7 +490,7 @@ public class GeneratePack {
     }
     /** Debug view of the sell screen at SCALE, on a dark backdrop. */
     static BufferedImage preview() throws IOException {
-        BufferedImage bg = background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "희귀"), "모두 판매", new Color(0x3F6C42));
+        BufferedImage bg = background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "희귀"), GOLD);
         var image = new BufferedImage(bg.getWidth() + 80, bg.getHeight() + 80, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
         g.setColor(new Color(0x303030));

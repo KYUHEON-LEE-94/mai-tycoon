@@ -21,7 +21,7 @@ final class HelpMenu implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int DEX_BUTTON = 49;
+    private static final int DEX_BUTTON = 48, WALLET_BUTTON = 50;
     private final MaiTycoonPlugin plugin;
     HelpMenu(MaiTycoonPlugin plugin) { this.plugin = plugin; }
     private static Component key(String keybind) { return Component.keybind(keybind, NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false); }
@@ -55,7 +55,7 @@ final class HelpMenu implements Listener {
             text("남이 내 땅의 작물을 거두면 발자국이 남고 신고할 수 있습니다."))));
         inventory.setItem(30, entry(Material.GLOWSTONE_DUST, "생활 램프와 자동 심기", List.of(
             text("램프 상인에게 골드로 램프를 삽니다."),
-            text("괭이를 든 채 램프 상인을 누르면 수확 보너스를 붙입니다."),
+            text("괭이, 곡괭이, 삽, 도끼를 든 채 램프 상인을 누르면 능력을 붙입니다."),
             text("자동 심기는 토지 관리인 메뉴에서 켭니다."))));
         inventory.setItem(32, entry(Material.CHEST, "상인", List.of(
             text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽 상점에 함께 있습니다."),
@@ -65,18 +65,22 @@ final class HelpMenu implements Listener {
         inventory.setItem(34, entry(Material.PAPER, "명령어", List.of(
             text("/도움말  이 화면"),
             text("/tycoon info  보유 재화"),
+            text("/tycoon wallet  지갑과 골드 보내기"),
             text("/tycoon price  시세 게시판"),
             text("/tycoon village  마을로 이동"),
             text("/tycoon starter  시작 보급품"),
             text("/tycoon land member add 이름  내 땅 작업자 추가"))));
         inventory.setItem(DEX_BUTTON, Ui.icon(Material.BOOK, Ui.line("수집 도감 열기", NamedTextColor.YELLOW), List.of()));
+        inventory.setItem(WALLET_BUTTON, Ui.icon(Material.GOLD_INGOT, Ui.line("지갑 열기", NamedTextColor.YELLOW), List.of(text("잔액과 최근 거래를 보고 골드를 보냅니다."), text("돈은 계정에 있어서 들고 다니지 않습니다."))));
         player.openInventory(inventory);
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder)) return;
         event.setCancelled(true);
-        if (event.getRawSlot() == DEX_BUTTON && event.getWhoClicked() instanceof Player player) plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openDex(player));
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (event.getRawSlot() == DEX_BUTTON) plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openDex(player));
+        else if (event.getRawSlot() == WALLET_BUTTON) plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openWallet(player));
     }
     @EventHandler
     public void onDrag(InventoryDragEvent event) {

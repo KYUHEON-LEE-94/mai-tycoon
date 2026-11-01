@@ -31,6 +31,8 @@ final class ShopTitle {
         tiles(switch(kind){case SELL->0xE300;case BUY->0xE400;case BUILD->0xE600;case FURNITURE->0xE900;});
         return this;
     }
+    /** The lamp screen has its own background; the price sits on the drawn buy button. */
+    ShopTitle lamp(long price){tiles(0xE500);number("footer",27,compact(price));put(Key.key("maitycoon","footer"),"\uE220",NamedTextColor.WHITE,14);return this;}
     private void tiles(int base){
         for(int row=0;row<ShopLayout.TILE_ROWS;row++)for(int col=0;col<4;col++){
             moveTo(col*44);put(GUI,String.valueOf((char)(base+row*4+col)),NamedTextColor.WHITE,45);

@@ -169,7 +169,7 @@ final class Lands implements Listener {
             Ui.line(profile.landPermit() ? "땅 구매 이용권 보유" : "땅 구매 이용권 없음", profile.landPermit() ? NamedTextColor.GREEN : NamedTextColor.RED),
             List.of(Ui.line("수집 도감 보상으로 얻습니다.", NamedTextColor.GRAY))));
         inventory.setItem(AUTO_PLANT, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기", NamedTextColor.YELLOW), List.of(Ui.line("남은 횟수 " + profile.replants() + "회", NamedTextColor.GRAY))));
-        inventory.setItem(LAMP, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 램프", NamedTextColor.YELLOW), List.of(Ui.line("보유 " + profile.lamps() + "개", NamedTextColor.GRAY), Ui.line("괭이를 손에 든 채 누르세요.", NamedTextColor.GRAY))));
+        inventory.setItem(LAMP, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 램프", NamedTextColor.YELLOW), List.of(Ui.line("보유 " + profile.lamps() + "개", NamedTextColor.GRAY), Ui.line("도구를 손에 든 채 누르세요.", NamedTextColor.GRAY))));
         inventory.setItem(FARM, Ui.icon(Material.WRITABLE_BOOK, Ui.line("농장 관리", NamedTextColor.YELLOW), List.of(
             Ui.line("신고할 수 있는 발자국 " + reportable(player).size() + "건", NamedTextColor.GRAY), Ui.line("작업자 " + registry.workers(player.getUniqueId()).size() + "명", NamedTextColor.GRAY))));
         inventory.setItem(SHOW, Ui.icon(Material.SPYGLASS, Ui.line("청크 경계 보기", NamedTextColor.AQUA), List.of(Ui.line("지금 서 있는 청크의 경계를 잠시 표시합니다.", NamedTextColor.GRAY))));
@@ -351,6 +351,8 @@ final class Lands implements Listener {
         if (top instanceof Holder || top instanceof BuyHolder) event.setCancelled(true);
     }
     List<String> ownedKeys(UUID owner) { return registry.parcels().entrySet().stream().filter(entry -> entry.getValue().owner().equals(owner)).map(Map.Entry::getKey).toList(); }
+    /** Neither bought land nor anywhere the village keeps for itself. */
+    boolean wild(Block block) { return owner(block) == null && !village.overlaps(block.getWorld(), block.getX() >> 4, block.getZ() >> 4); }
     boolean owned(org.bukkit.Chunk chunk) { return registry.owner(key(chunk.getWorld(), chunk.getX(), chunk.getZ())) != null; }
     void openFarm(Player player) { farmMenu.open(player); }
     List<FootprintLog.Footprint> reportable(Player player) { return footprints.reportable(player.getUniqueId(), System.currentTimeMillis()); }

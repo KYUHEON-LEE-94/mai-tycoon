@@ -201,9 +201,14 @@ final class Shop implements Listener {
         return Ui.decorate(catalog.item(id, 1), catalog.name(id).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), lore);
     }
     private ItemStack buyIcon(String item, Holder holder) {
-        return Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
-            Ui.line("개당 " + stock(holder.kind).get(item).price() + " 골드", NamedTextColor.YELLOW),
-            Ui.line("좌클릭 " + buyAmount(item, AMOUNTS[holder.amountIndex]) + "개 구매 / 우클릭 " + catalog.maxStack(item) + "개 구매", NamedTextColor.GREEN)));
+        List<Component> lore = new ArrayList<>(List.of(Ui.line("개당 " + stock(holder.kind).get(item).price() + " 골드", NamedTextColor.YELLOW)));
+        Catalog.Crop crop = catalog.bySeed(item);
+        if (crop != null) {
+            lore.add(Ui.line("다 자라는 데 약 " + crop.growMillis() / 60_000 + "분 · 수확 " + crop.minYield() + "~" + crop.maxYield() + "개", NamedTextColor.GRAY));
+            lore.add(Ui.line("지금 판매가 " + market.price(crop.id()) + " 골드", NamedTextColor.GRAY));
+        }
+        lore.add(Ui.line("좌클릭 " + buyAmount(item, AMOUNTS[holder.amountIndex]) + "개 구매 / 우클릭 " + catalog.maxStack(item) + "개 구매", NamedTextColor.GREEN));
+        return Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), lore);
     }
     private int buyAmount(String item, int wanted) { return Math.min(wanted, catalog.maxStack(item)); }
     /** only == null covers every listed crop. Off-hand and named items stay untouched. */

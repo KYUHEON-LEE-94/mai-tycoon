@@ -22,13 +22,16 @@ public final class TransactionJournal {
         Files.createDirectories(directory);
         try (Stream<Path> files = Files.list(directory)) {
             for (Path path : files.sorted().toList()) {
-                if (!path.getFileName().toString().endsWith(".tx")) continue;
-                List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-                if (lines.size() != 4) throw new IOException("Invalid journal entry " + path);
-                String id = path.getFileName().toString().replace(".tx", "");
-                interrupted.put(id, new Entry(id, UUID.fromString(lines.get(0)), lines.get(1), lines.get(2), lines.get(3)));
+                if (path.getFileName().toString().endsWith(".tx")) hold(path.getFileName().toString().replace(".tx", ""));
             }
         }
+    }
+    /** Treats a trade as interrupted right away, for a failure the server survives. */
+    public void hold(String id) throws IOException {
+        Path path = directory.resolve(id + ".tx");
+        List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        if (lines.size() != 4) throw new IOException("Invalid journal entry " + path);
+        interrupted.put(id, new Entry(id, UUID.fromString(lines.get(0)), lines.get(1), lines.get(2), lines.get(3)));
     }
     public Collection<Entry> interrupted() { return Collections.unmodifiableCollection(interrupted.values()); }
     public boolean held(UUID player) { return interrupted.values().stream().anyMatch(entry -> entry.player().equals(player)); }
