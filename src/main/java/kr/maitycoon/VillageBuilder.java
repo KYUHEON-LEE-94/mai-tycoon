@@ -14,7 +14,7 @@ import org.bukkit.block.sign.Side;
  */
 final class VillageBuilder {
     static final int RADIUS = 44, BLEND = 10, SPAWN_DZ = 7;
-    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -12, PLAZA_NPC_X = 9, STALL_BACK = -21, STALL_FRONT = -13;
+    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -14, PLAZA_NPC_X = 9, STALL_BACK = -21, STALL_FRONT = -13;
     private static final int PLAZA = 12, ROAD = 2, DEPTH = 24, CLEAR_MAX_ABOVE = 80;
     private static final int[][] PLOTS = {{16, 16}, {27, 16}, {16, 27}, {27, 27}};
     private static final Village.Zone CANE = new Village.Zone(-36, 17, -30, 23), CACTUS = new Village.Zone(-28, 17, -22, 23),
@@ -134,13 +134,13 @@ final class VillageBuilder {
     /** Clears and draws both shop buildings and the two plaza desks; also used to upgrade older villages. */
     void shops() {
         for (int dx = -13; dx <= 13; dx++) for (int dz = STALL_BACK - 1; dz <= STALL_FRONT + 2; dz++) {
-            if (Math.abs(dx) <= ROAD) continue;
             for (int y = 1; y <= 11; y++) set(dx, y, dz, Material.AIR);
         }
         shop(MARKET_STALL_X, Material.YELLOW_WOOL, Material.WHITE_WOOL, "농산물 상점", "작물을 사들입니다",
             List.of(Material.HAY_BLOCK, Material.PUMPKIN, Material.MELON, Material.HAY_BLOCK, Material.PUMPKIN), Material.HAY_BLOCK);
         shop(SEED_STALL_X, Material.GREEN_WOOL, Material.WHITE_WOOL, "씨앗 상점", "씨앗과 농기구",
             List.of(Material.BARREL, Material.COMPOSTER, Material.BARREL, Material.COMPOSTER, Material.BARREL), Material.BARREL);
+        lampShop();
         set(-PLAZA_NPC_X - 1, 1, -1, Material.BOOKSHELF);
         set(-PLAZA_NPC_X - 1, 1, 1, Material.BOOKSHELF);
         set(-PLAZA_NPC_X - 1, 2, -1, Material.LANTERN);
@@ -198,6 +198,33 @@ final class VillageBuilder {
         set(mid - 3, 3, front + 1, Material.LANTERN);
         set(mid + 3, 3, front + 1, Material.LANTERN);
         wallSign(mid, 1, front + 1, BlockFace.SOUTH, Material.SPRUCE_WALL_SIGN, title, purpose);
+    }
+    /** Roofs the road between the two shops and opens their inner walls, so all three merchants share one counter. */
+    private void lampShop() {
+        int back = STALL_BACK, front = STALL_FRONT, wallTop = 4;
+        rect(-ROAD, back, ROAD, front, 0, Material.SPRUCE_PLANKS);
+        for (int side : new int[]{-1, 1}) for (int y = 1; y < wallTop; y++) for (int dz = back + 1; dz < front; dz++) set(side * (ROAD + 1), y, dz, Material.AIR);
+        for (int dx = -ROAD; dx <= ROAD; dx++) {
+            set(dx, 0, front, Material.STONE_BRICKS);
+            for (int y = 1; y <= wallTop; y++) set(dx, y, back, dx == 0 || y == 1 || y == wallTop ? Material.STRIPPED_SPRUCE_LOG : Material.WHITE_TERRACOTTA);
+            set(dx, 1, front, Material.SPRUCE_PLANKS);
+            set(dx, wallTop, front, Material.STRIPPED_SPRUCE_LOG);
+            set(dx, 1, back + 1, Material.BARREL);
+            if (dx % 2 == 0) set(dx, 2, back + 1, Material.LANTERN);
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            Material stripe = dx == 0 ? Material.WHITE_WOOL : Material.ORANGE_WOOL;
+            set(dx, 4, front + 1, stripe);
+            set(dx, 3, front + 2, stripe);
+        }
+        for (int dz = back - 1; dz <= front; dz++) {
+            data(-1, wallTop + 1, dz, stairs(Material.BRICK_STAIRS, BlockFace.EAST));
+            data(1, wallTop + 1, dz, stairs(Material.BRICK_STAIRS, BlockFace.WEST));
+            set(0, wallTop + 1, dz, Material.BRICKS);
+            set(0, wallTop + 2, dz, Material.BRICK_SLAB);
+        }
+        set(0, 3, front + 1, Material.LANTERN);
+        wallSign(0, 1, front + 1, BlockFace.SOUTH, Material.SPRUCE_WALL_SIGN, "램프 상점", "생활 램프");
     }
     /** Every house-sized building. Clears its own footprint, so it also upgrades an older village. */
     void buildings() {

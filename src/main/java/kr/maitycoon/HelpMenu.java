@@ -58,7 +58,7 @@ final class HelpMenu implements Listener {
             text("괭이를 든 채 램프 상인을 누르면 수확 보너스를 붙입니다."),
             text("자동 심기는 토지 관리인 메뉴에서 켭니다."))));
         inventory.setItem(32, entry(Material.CHEST, "상인", List.of(
-            text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽에 함께 있습니다."),
+            text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽 상점에 함께 있습니다."),
             text("건축 자재 상인, 가구 상인도 광장에 있습니다."),
             text("도감 사서, 토지 관리인, 안내원도 만날 수 있습니다."),
             text("NPC를 우클릭하면 메뉴가 열립니다."))));

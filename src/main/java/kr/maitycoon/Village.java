@@ -31,19 +31,20 @@ final class Village implements Listener {
     private static final List<Npc> NPCS = List.of(
         new Npc("market", -2, VillageBuilder.NPC_Z, 0f, "작물 상인", "kai"),
         new Npc("seeds", 2, VillageBuilder.NPC_Z, 0f, "씨앗 상인", "makena"),
-        new Npc("lamp", 0, VillageBuilder.NPC_Z - 1, 0f, "램프 상인", "steve"),
+        new Npc("lamp", 0, VillageBuilder.NPC_Z, 0f, "램프 상인", "steve"),
         new Npc("building", -9, 7, -90f, "건축 자재 상인", "noor"),
         new Npc("furniture", 9, 7, 90f, "가구 상인", "sunny"),
         new Npc("guide", 3, VillageBuilder.SPAWN_DZ + 2, 180f, "안내원", "ari"),
         new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", "efe"),
         new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", "zuri"));
     /** Where NPCs stood in older versions. Their entities stay in those chunks until removed. */
-    private static final List<int[]> OLD_SPOTS = List.of(new int[]{-7, -15}, new int[]{7, -15});
+    private static final List<int[]> OLD_SPOTS = List.of(new int[]{-7, -15}, new int[]{7, -15}, new int[]{-2, -12}, new int[]{2, -12}, new int[]{0, -13});
     private record Sign(int dx, double dy, double dz, String text) {}
     private static final List<Sign> SIGNS = List.of(
         new Sign(VillageBuilder.MARKET_STALL_X, 7.6, VillageBuilder.STALL_FRONT + 1.6, "농산물 상점"),
-        new Sign(VillageBuilder.SEED_STALL_X, 7.6, VillageBuilder.STALL_FRONT + 1.6, "씨앗 상점"));
-    private static final int STRUCTURES = 3;
+        new Sign(VillageBuilder.SEED_STALL_X, 7.6, VillageBuilder.STALL_FRONT + 1.6, "씨앗 상점"),
+        new Sign(0, 7.6, VillageBuilder.STALL_FRONT + 1.6, "램프 상점"));
+    private static final int STRUCTURES = 4;
     static final Set<Material> FARMABLE = EnumSet.of(Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
         Material.MELON, Material.PUMPKIN, Material.MELON_STEM, Material.PUMPKIN_STEM, Material.ATTACHED_MELON_STEM, Material.ATTACHED_PUMPKIN_STEM,
         Material.SUGAR_CANE, Material.CACTUS, Material.BAMBOO, Material.BAMBOO_SAPLING, Material.COCOA, Material.SWEET_BERRY_BUSH,
@@ -159,10 +160,12 @@ final class Village implements Listener {
         if (world == null || structures >= STRUCTURES) return;
         var builder = new VillageBuilder(world, x, z, y);
         builder.shops();
-        builder.buildings();
+        if (structures < 3) {
+            builder.buildings();
+            showcase.accept(builder.showcaseSoil());
+        }
         structures = STRUCTURES;
         saveState();
-        showcase.accept(builder.showcaseSoil());
         plugin.getLogger().info("Village buildings rebuilt");
     }
     /** NPCs turn toward a nearby player, like someone waiting at a counter. */
