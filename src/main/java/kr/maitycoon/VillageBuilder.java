@@ -14,7 +14,9 @@ import org.bukkit.block.sign.Side;
  */
 final class VillageBuilder {
     static final int RADIUS = 44, BLEND = 10, SPAWN_DZ = 7;
-    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -14, PLAZA_NPC_X = 9, STALL_BACK = -21, STALL_FRONT = -13;
+    static final int MARKET_STALL_X = -7, SEED_STALL_X = 7, NPC_Z = -14, STALL_BACK = -21, STALL_FRONT = -13;
+    /** Doors of the buildings that hold a merchant, and the row the merchant stands on behind the counter. */
+    static final int HALL_DOOR_X = -26, EAST_DOOR_X = 22, HALL_NPC_Z = -11, LAND_NPC_Z = -10, SOUTH_NPC_Z = 10;
     private static final int PLAZA = 12, ROAD = 2, DEPTH = 24, CLEAR_MAX_ABOVE = 80;
     private static final int[][] PLOTS = {{16, 16}, {27, 16}, {16, 27}, {27, 27}};
     private static final Village.Zone CANE = new Village.Zone(-36, 17, -30, 23), CACTUS = new Village.Zone(-28, 17, -22, 23),
@@ -131,7 +133,7 @@ final class VillageBuilder {
             set(face.getModX(), 2, face.getModZ(), Material.STONE_BRICK_SLAB);
         }
     }
-    /** Clears and draws both shop buildings and the two plaza desks; also used to upgrade older villages. */
+    /** Clears and draws the joined shop and removes the desks older villages had on the plaza. */
     void shops() {
         for (int dx = -13; dx <= 13; dx++) for (int dz = STALL_BACK - 1; dz <= STALL_FRONT + 2; dz++) {
             for (int y = 1; y <= 11; y++) set(dx, y, dz, Material.AIR);
@@ -141,15 +143,7 @@ final class VillageBuilder {
         shop(SEED_STALL_X, Material.GREEN_WOOL, Material.WHITE_WOOL, "씨앗 상점", "씨앗과 농기구",
             List.of(Material.BARREL, Material.COMPOSTER, Material.BARREL, Material.COMPOSTER, Material.BARREL), Material.BARREL);
         lampShop();
-        set(-PLAZA_NPC_X - 1, 1, -1, Material.BOOKSHELF);
-        set(-PLAZA_NPC_X - 1, 1, 1, Material.BOOKSHELF);
-        set(-PLAZA_NPC_X - 1, 2, -1, Material.LANTERN);
-        set(-PLAZA_NPC_X - 1, 2, 1, Material.LANTERN);
-        set(-PLAZA_NPC_X + 1, 1, 0, Material.LECTERN);
-        set(PLAZA_NPC_X + 1, 1, -1, Material.CARTOGRAPHY_TABLE);
-        set(PLAZA_NPC_X + 1, 1, 1, Material.CARTOGRAPHY_TABLE);
-        set(PLAZA_NPC_X + 1, 2, -1, Material.LANTERN);
-        set(PLAZA_NPC_X + 1, 2, 1, Material.LANTERN);
+        for (int dx : new int[]{-10, -8, 8, 10}) for (int dz = -1; dz <= 1; dz++) for (int y = 1; y <= 2; y++) set(dx, y, dz, Material.AIR);
     }
     /** Timber shop facing south onto the plaza: plaster walls, clay roof, striped awning, and the NPC behind the counter. */
     private void shop(int mid, Material stripeA, Material stripeB, String title, String purpose, List<Material> goods, Material display) {
@@ -228,12 +222,22 @@ final class VillageBuilder {
     }
     /** Every house-sized building. Clears its own footprint, so it also upgrades an older village. */
     void buildings() {
-        building(-36, -15, -16, -5, 5, Material.DEEPSLATE_TILE_STAIRS, BlockFace.SOUTH, -26, "마을회관");
-        building(16, -13, 24, -5, 4, Material.BRICK_STAIRS, BlockFace.SOUTH, 22, "민가");
+        building(-36, -15, -16, -5, 5, Material.DEEPSLATE_TILE_STAIRS, BlockFace.SOUTH, HALL_DOOR_X, "마을회관");
+        service(-35, -17, HALL_NPC_Z + 1, -14, -5, HALL_DOOR_X, List.of(Material.BOOKSHELF, Material.BOOKSHELF, Material.LECTERN));
+        building(16, -13, 24, -5, 4, Material.BRICK_STAIRS, BlockFace.SOUTH, EAST_DOOR_X, "토지 사무소");
+        service(17, 23, LAND_NPC_Z + 1, -12, -5, EAST_DOOR_X, List.of(Material.CARTOGRAPHY_TABLE, Material.BOOKSHELF));
         building(28, -13, 36, -5, 4, Material.DARK_OAK_STAIRS, BlockFace.SOUTH, 34, "민가");
-        building(16, 5, 24, 12, 4, Material.SPRUCE_STAIRS, BlockFace.NORTH, 22, "민가");
+        building(16, 5, 24, 12, 4, Material.SPRUCE_STAIRS, BlockFace.NORTH, EAST_DOOR_X, "가구 상점");
+        service(17, 23, SOUTH_NPC_Z - 1, 11, 5, EAST_DOOR_X, List.of(Material.CHEST, Material.BOOKSHELF, Material.BARREL));
         building(28, 5, 36, 12, 4, Material.BRICK_STAIRS, BlockFace.NORTH, 34, "민가");
-        building(-36, 5, -16, 12, 5, Material.DARK_OAK_STAIRS, BlockFace.NORTH, -26, "공동 창고");
+        building(-36, 5, -16, 12, 5, Material.DARK_OAK_STAIRS, BlockFace.NORTH, HALL_DOOR_X, "건축 자재 상점");
+        service(-35, -17, SOUTH_NPC_Z - 1, 11, 5, HALL_DOOR_X, List.of(Material.BRICKS, Material.OAK_PLANKS, Material.STONE_BRICKS));
+    }
+    /** A counter across the room with goods along the back wall. The door stays open, so nobody has to find it with a tool in hand. */
+    private void service(int x1, int x2, int counterZ, int backZ, int doorZ, int doorX, List<Material> goods) {
+        for (int y = 1; y <= 2; y++) set(doorX, y, doorZ, Material.AIR);
+        for (int dx = x1; dx <= x2; dx++) set(dx, 1, counterZ, Material.SPRUCE_PLANKS);
+        for (int dx = x1 + 2; dx <= x2 - 2; dx++) set(dx, 1, backZ, goods.get(Math.floorMod(dx, goods.size())));
     }
     /** Timber-framed plaster walls on a stone base, with window boxes, a pitched roof and a chimney. */
     private void building(int x1, int z1, int x2, int z2, int height, Material roofStairs, BlockFace front, int doorX, String name) {

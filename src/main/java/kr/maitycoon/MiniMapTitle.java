@@ -14,7 +14,11 @@ public final class MiniMapTitle {
     public static final int CELLS = 25, CELL_SIZE = 3, MAP_SIZE = CELLS * CELL_SIZE, FRAME_MARGIN = 2;
     private static final int LEFT = 332;
     private static final String CELL = "", FRAME = "";
-    private static final Key SPACE = Key.key("maitycoon", "space"), GUI = Key.key("maitycoon", "gui");
+    private static final Key SPACE = Key.key("maitycoon", "space"), GUI = Key.key("maitycoon", "gui"), HUD = Key.key("maitycoon", "hud");
+    private static final String PURSE = "\uE260", GOLD_LABEL = "\uE261";
+    public static final int PURSE_WIDTH = 76;
+    private static final int DIGIT_ADVANCE = 4, LABEL_ADVANCE = 14, PURSE_PADDING = 5;
+    private static final TextColor GOLD = TextColor.color(0xF2DDA4);
     private MiniMapTitle() {}
     private static Component space(int delta) {
         StringBuilder spaces = new StringBuilder();
@@ -22,10 +26,19 @@ public final class MiniMapTitle {
         for (int bit = 0; left != 0; bit++, left >>= 1) if ((left & 1) != 0) spaces.append((char) (base + bit));
         return Component.text(spaces.toString()).font(SPACE);
     }
-    /** One component per run of equal colour, which keeps the packet small over grass or water. */
-    public static Component render(int[][] cells) {
+    /**
+     * One component per run of equal colour, which keeps the packet small over grass or water. The balance shares this
+     * bar instead of having its own, because a second bar would push the map down whenever the land banner appears.
+     */
+    public static Component render(int[][] cells, long coins) {
         TextComponent.Builder title = Component.text().color(NamedTextColor.WHITE);
-        title.append(space(LEFT - FRAME_MARGIN));
+        String value = String.format("%,d", coins);
+        int used = PURSE_PADDING + value.length() * DIGIT_ADVANCE + LABEL_ADVANCE;
+        title.append(Component.text(PURSE).font(HUD));
+        title.append(space(PURSE_PADDING - (PURSE_WIDTH + 1)));
+        title.append(Component.text(value).font(HUD).color(GOLD));
+        title.append(Component.text(GOLD_LABEL).font(HUD));
+        title.append(space(LEFT - FRAME_MARGIN - used));
         title.append(Component.text(FRAME).font(GUI));
         title.append(space(FRAME_MARGIN - (MAP_SIZE + FRAME_MARGIN * 2 + 1)));
         for (int row = 0; row < cells.length; row++) {

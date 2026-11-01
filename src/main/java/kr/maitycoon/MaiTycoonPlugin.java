@@ -127,7 +127,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(marketMenu, this);
             helpMenu = new HelpMenu(this);
             getServer().getPluginManager().registerEvents(helpMenu, this);
-            miniMap = new MiniMap(this);
+            miniMap = new MiniMap(this, store);
             getServer().getPluginManager().registerEvents(miniMap, this);
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
             if (plantPrice < 1 || plantUses < 1) throw new IOException("Invalid auto-plant settings");
@@ -378,7 +378,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 }
                 case "price" -> marketMenu.open(player);
                 case "buildshop", "seedshop", "cropshop" -> {
-                    if (!player.hasPermission("maitycoon.admin")) tell(player, "상점은 광장의 상인을 우클릭해 이용해 주세요.");
+                    if (!player.hasPermission("maitycoon.admin")) tell(player, "상점은 마을의 상인을 우클릭해 이용해 주세요.");
                     else shop.open(player, action.equals("buildshop") ? Shop.Kind.BUILD : action.equals("seedshop") ? Shop.Kind.BUY : Shop.Kind.SELL);
                 }
                 case "starter" -> starter(player);
@@ -397,7 +397,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     else { player.teleport(village.spawn()); tell(player, "마을 광장으로 이동했습니다."); }
                 }
                 default -> {
-                    tell(player, "광장의 작물 상인에게 작물을 팔고, 씨앗 상인에게 씨앗과 도구를 살 수 있습니다.");
+                    tell(player, "광장 북쪽 상점의 작물 상인에게 작물을 팔고, 씨앗 상인에게 씨앗과 도구를 살 수 있습니다.");
                     if (player.hasPermission("maitycoon.admin")) tell(player, "/tycoon buildshop | seedshop | cropshop — 관리자 상점 열기");
                     tell(player, "/tycoon starter — 시작 보급품 받기 (1회)");
                     tell(player, "/tycoon price — 시세 게시판 열기");

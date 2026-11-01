@@ -43,6 +43,7 @@ public class GeneratePack {
         png("assets/maitycoon/textures/gui/dim_short.png", dimmed(54));
         text("assets/maitycoon/items/blank.json", "{\"model\":{\"type\":\"minecraft:empty\"}}");
         menuText();
+        hud();
         npcSkins();
         miniMapFonts();
         // The land banner is only text; an empty white bar keeps it from looking like a boss fight.
@@ -481,6 +482,20 @@ public class GeneratePack {
         g.fillRect(0, 0, image.getWidth(), image.getHeight());
         g.dispose();
         return image;
+    }
+    /** The balance panel and its digits, drawn in the same style as the minimap frame. */
+    static void hud() throws IOException {
+        int scale = 3, width = MiniMapTitle.PURSE_WIDTH, height = 11;
+        var purse = new BufferedImage(width * scale, height * scale, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = purse.createGraphics();
+        g.setColor(CHARCOAL);
+        g.fillRect(0, 0, purse.getWidth(), purse.getHeight());
+        g.setColor(LINE_GOLD);
+        g.setStroke(new BasicStroke(scale));
+        g.drawRect(1, 1, purse.getWidth() - 3, purse.getHeight() - 3);
+        g.dispose();
+        png("assets/maitycoon/textures/gui/purse.png", purse);
+        text("assets/maitycoon/font/hud.json", digitFont(6, 2).replace("]}]}", "]}," + bitmap("purse.png", height, 5, "\\ue260") + "," + bitmap("gold_label.png", 7, 3, "\\ue261") + "]}"));
     }
     /** Fixed labels and digits at every text height. Numbers and names on these screens stay live, never part of a background. */
     static void menuText() throws IOException {
