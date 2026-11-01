@@ -28,17 +28,33 @@ import org.bukkit.inventory.*;
 final class Lands implements Listener {
     private static final class BuyHolder implements InventoryHolder {
         private final int chunkX, chunkZ;
+        private final long cost;
+        private final boolean bought;
         private boolean done;
         private Inventory inventory;
-        private BuyHolder(int chunkX, int chunkZ) { this.chunkX = chunkX; this.chunkZ = chunkZ; }
+        private BuyHolder(int chunkX, int chunkZ, long cost, boolean bought) {
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
+            this.cost = cost;
+            this.bought = bought;
+        }
         @Override public Inventory getInventory() { return inventory; }
     }
     private static final class Holder implements InventoryHolder {
         private final Map<Integer, int[]> chunks = new HashMap<>();
+        private final int centerX, centerZ;
+        private int chosenX, chosenZ;
+        private boolean reopening;
         private Inventory inventory;
+        private Holder(int centerX, int centerZ, int chosenX, int chosenZ) {
+            this.centerX = centerX;
+            this.centerZ = centerZ;
+            this.chosenX = chosenX;
+            this.chosenZ = chosenZ;
+        }
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int COLUMNS = 9, ROWS = 5, INFO = 45, DEX = 45, AUTO_PLANT = 46, MINE = 47, LAMP = 48, PERMIT = 49, FARM = 51, SHOW = 53;
+    private enum Status { VILLAGE, MINE, TAKEN, FREE }
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
     private final Village village;
@@ -144,72 +160,133 @@ final class Lands implements Listener {
     void open(Player player) {
         World world = village.world();
         if (world == null || !player.getWorld().equals(world)) { plugin.tell(player, "땅은 마을이 있는 월드에서만 살 수 있습니다."); return; }
-        Holder holder = new Holder();
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "땅 지도"));
-        plugin.guarded(player, () -> render(holder, player));
+        Chunk here = player.getLocation().getChunk();
+        plugin.guarded(player, () -> show(new Holder(here.getX(), here.getZ(), here.getX(), here.getZ()), player));
+    }
+    /** A title cannot change on an open window, so a new selection opens the screen again. */
+    private void show(Holder holder, Player player) throws IOException {
+        Profile profile = store.load(player.getUniqueId());
+        boolean drawn = plugin.packDrawn(player);
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, drawn ? mapTitle(holder, player, profile) : Component.text("토지"));
+        render(holder, player, profile);
         player.openInventory(holder.inventory);
     }
-    private void render(Holder holder, Player player) throws IOException {
-        Inventory inventory = holder.inventory;
-        plugin.frame(inventory, player);
-        holder.chunks.clear();
-        Profile profile = store.load(player.getUniqueId());
-        int owned = registry.count(player.getUniqueId());
-        long next = LandRegistry.price(price, step, owned);
-        Chunk here = player.getLocation().getChunk();
-        for (int row = 0; row < ROWS; row++) for (int column = 0; column < COLUMNS; column++) {
-            int cx = here.getX() + column - COLUMNS / 2, cz = here.getZ() + row - ROWS / 2;
-            int slot = row * COLUMNS + column;
-            holder.chunks.put(slot, new int[]{cx, cz});
-            inventory.setItem(slot, cell(player, cx, cz, cx == here.getX() && cz == here.getZ(), next));
-        }
-        inventory.setItem(INFO, Ui.icon(Material.GOLD_INGOT, Ui.line(profile.coins() + " 골드", NamedTextColor.GOLD), List.of(Ui.line("보유 금액", NamedTextColor.GRAY))));
-        inventory.setItem(MINE, Ui.icon(Material.EMERALD_BLOCK, Ui.line("내 땅 " + owned + " / " + max, NamedTextColor.GREEN), List.of(Ui.line("다음 땅 가격 " + next + " 골드", NamedTextColor.GRAY))));
-        inventory.setItem(PERMIT, Ui.icon(profile.landPermit() ? Material.PAPER : Material.BARRIER,
-            Ui.line(profile.landPermit() ? "땅 구매 이용권 보유" : "땅 구매 이용권 없음", profile.landPermit() ? NamedTextColor.GREEN : NamedTextColor.RED),
-            List.of(Ui.line("수집 도감 보상으로 얻습니다.", NamedTextColor.GRAY))));
-        inventory.setItem(AUTO_PLANT, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기", NamedTextColor.YELLOW), List.of(Ui.line("남은 횟수 " + profile.replants() + "회", NamedTextColor.GRAY))));
-        inventory.setItem(LAMP, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 램프", NamedTextColor.YELLOW), List.of(Ui.line("보유 " + profile.lamps() + "개", NamedTextColor.GRAY), Ui.line("도구를 손에 든 채 누르세요.", NamedTextColor.GRAY))));
-        inventory.setItem(FARM, Ui.icon(Material.WRITABLE_BOOK, Ui.line("농장 관리", NamedTextColor.YELLOW), List.of(
-            Ui.line("신고할 수 있는 발자국 " + reportable(player).size() + "건", NamedTextColor.GRAY), Ui.line("작업자 " + registry.workers(player.getUniqueId()).size() + "명", NamedTextColor.GRAY))));
-        inventory.setItem(SHOW, Ui.icon(Material.SPYGLASS, Ui.line("청크 경계 보기", NamedTextColor.AQUA), List.of(Ui.line("지금 서 있는 청크의 경계를 잠시 표시합니다.", NamedTextColor.GRAY))));
+    private void showLater(Holder holder, Player player) {
+        if (holder.reopening) return;
+        holder.reopening = true;
+        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> {
+            holder.reopening = false;
+            if (player.getOpenInventory().getTopInventory().getHolder() == holder) show(holder, player);
+        }));
     }
-    private ItemStack cell(Player player, int cx, int cz, boolean here, long next) {
+    private Status status(Player player, int cx, int cz) {
         World world = player.getWorld();
         UUID owner = registry.owner(key(world, cx, cz));
-        String position = "청크 " + cx + ", " + cz + (here ? " (현재 위치)" : "");
-        Material type;
-        Component name;
-        List<Component> lore = new ArrayList<>(List.of(Ui.line(position, NamedTextColor.GRAY)));
-        if (village.overlaps(world, cx, cz)) { type = Material.YELLOW_CONCRETE; name = Ui.line("마을 구역", NamedTextColor.YELLOW); }
-        else if (player.getUniqueId().equals(owner)) { type = Material.EMERALD_BLOCK; name = Ui.line("내 땅", NamedTextColor.GREEN); }
-        else if (owner != null) { type = Material.RED_CONCRETE; name = Ui.line(ownerName(owner) + "의 땅", NamedTextColor.RED); }
-        else {
-            type = Material.LIME_STAINED_GLASS;
-            name = Ui.line("빈 땅", NamedTextColor.WHITE);
-            lore.add(Ui.line("우클릭으로 " + next + " 골드에 구매", NamedTextColor.GREEN));
-        }
-        if (here) type = type == Material.LIME_STAINED_GLASS ? Material.COMPASS : type;
-        ItemStack icon = Ui.icon(type, name, lore);
-        return here ? Ui.glow(icon) : icon;
+        if (village.overlaps(world, cx, cz)) return Status.VILLAGE;
+        if (player.getUniqueId().equals(owner)) return Status.MINE;
+        return owner != null ? Status.TAKEN : Status.FREE;
     }
-    private void buy(Player player, int cx, int cz) throws IOException {
-        if (!plugin.survival(player)) return;
-        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
+    private static String label(Status status) {
+        return switch (status) {
+            case VILLAGE -> "마을 구역";
+            case MINE -> "내 땅";
+            case TAKEN -> "타인 소유";
+            case FREE -> "구매 가능";
+        };
+    }
+    private static String money(long value) { return String.format("%,d", value); }
+    private int limit(Player player) { return player.hasPermission("maitycoon.admin") ? Integer.MAX_VALUE : max; }
+    private boolean permitted(Player player, Profile profile) { return profile.landPermit() || player.hasPermission("maitycoon.admin"); }
+    private long nextPrice(Player player) { return LandRegistry.price(price, step, registry.count(player.getUniqueId())); }
+    private Component mapTitle(Holder holder, Player player, Profile profile) {
+        int owned = registry.count(player.getUniqueId());
+        long next = nextPrice(player);
+        Status status = status(player, holder.chosenX, holder.chosenZ);
+        var title = new ShopTitle().screen(0xEA00).value(7, 144, owned + "/" + max);
+        title.selected(holder.chosenX - holder.centerX + MenuLayout.MAP_COLUMNS / 2, holder.chosenZ - holder.centerZ + MenuLayout.MAP_ROWS / 2);
+        title.value(32, 122, holder.chosenX + "," + holder.chosenZ).label(42, 122, label(status));
+        if (status == Status.FREE) {
+            title.value(52, 122, money(next));
+            if (profile.coins() < next) title.label(62, 122, "골드 부족");
+            else title.value(62, 122, money(profile.coins() - next));
+            title.label(72, 122, permitted(player, profile) ? "보유" : "필요");
+        }
+        if (!purchasable(player, profile, holder.chosenX, holder.chosenZ)) title.dimmed(MenuLayout.slotX(MenuLayout.LAND_CONFIRM.get(0)) - 1, false);
+        return title.build();
+    }
+    private boolean purchasable(Player player, Profile profile, int cx, int cz) {
+        return status(player, cx, cz) == Status.FREE && permitted(player, profile) && registry.count(player.getUniqueId()) < limit(player) && profile.coins() >= nextPrice(player);
+    }
+    private void render(Holder holder, Player player, Profile profile) {
+        Inventory inventory = holder.inventory;
+        boolean drawn = plugin.packDrawn(player);
+        plugin.frame(inventory, player);
+        holder.chunks.clear();
+        long next = nextPrice(player);
+        for (int row = 0; row < MenuLayout.MAP_ROWS; row++) for (int column = 0; column < MenuLayout.MAP_COLUMNS; column++) {
+            int cx = holder.centerX + column - MenuLayout.MAP_COLUMNS / 2, cz = holder.centerZ + row - MenuLayout.MAP_ROWS / 2;
+            int slot = MenuLayout.mapSlot(column, row);
+            holder.chunks.put(slot, new int[]{cx, cz});
+            inventory.setItem(slot, cell(player, cx, cz, cx == holder.centerX && cz == holder.centerZ, cx == holder.chosenX && cz == holder.chosenZ, next));
+        }
+        List<Component> reasons = refusal(player, profile, holder.chosenX, holder.chosenZ);
+        List<Component> summary = new ArrayList<>(List.of(Ui.line(label(status(player, holder.chosenX, holder.chosenZ)), NamedTextColor.YELLOW),
+            Ui.line("가격 " + money(next) + " 골드", NamedTextColor.GOLD), Ui.line("잔액 " + money(profile.coins()) + " 골드", NamedTextColor.GRAY),
+            Ui.line("이용권 " + (permitted(player, profile) ? "보유" : "필요"), NamedTextColor.GRAY), Ui.line("보유 땅 " + registry.count(player.getUniqueId()) + " / " + max, NamedTextColor.GRAY)));
+        if (!drawn) inventory.setItem(MenuLayout.LAND_SUMMARY, Ui.icon(Material.PAPER, Ui.line("선택한 땅: 청크 " + holder.chosenX + ", " + holder.chosenZ, NamedTextColor.WHITE), summary));
+        Ui.button(inventory, MenuLayout.LAND_BORDER, drawn, Ui.icon(Material.SPYGLASS, Ui.line("경계 확인", NamedTextColor.AQUA), List.of(Ui.line("선택한 땅의 경계를 잠시 표시합니다.", NamedTextColor.GRAY))));
+        Ui.button(inventory, MenuLayout.LAND_HOME, drawn, Ui.icon(Material.COMPASS, Ui.line("내 위치", NamedTextColor.WHITE), List.of(Ui.line("서 있는 땅을 선택합니다.", NamedTextColor.GRAY))));
+        Ui.button(inventory, MenuLayout.LAND_FARM, drawn, Ui.icon(Material.WRITABLE_BOOK, Ui.line("농장 관리", NamedTextColor.YELLOW), List.of(Ui.line("내 땅 목록, 작업자, 자동 심기, 발자국", NamedTextColor.GRAY))));
+        Ui.button(inventory, MenuLayout.LAND_CONFIRM, drawn, Ui.icon(Material.LIME_CONCRETE, Ui.line("구매 내용 확인", NamedTextColor.GREEN), reasons.isEmpty() ? List.of(Ui.line("아직 결제되지 않습니다.", NamedTextColor.GRAY)) : reasons));
+    }
+    private List<Component> refusal(Player player, Profile profile, int cx, int cz) {
+        Status status = status(player, cx, cz);
+        if (status != Status.FREE) return List.of(Ui.line(label(status) + "라 살 수 없습니다.", NamedTextColor.RED));
+        if (!permitted(player, profile)) return List.of(Ui.line("땅 구매 이용권이 필요합니다.", NamedTextColor.RED));
+        if (registry.count(player.getUniqueId()) >= limit(player)) return List.of(Ui.line("땅은 최대 " + max + "개까지 살 수 있습니다.", NamedTextColor.RED));
+        if (profile.coins() < nextPrice(player)) return List.of(Ui.line("골드가 부족합니다.", NamedTextColor.RED));
+        return List.of();
+    }
+    private ItemStack cell(Player player, int cx, int cz, boolean here, boolean chosen, long next) {
+        Status status = status(player, cx, cz);
+        UUID owner = registry.owner(key(player.getWorld(), cx, cz));
+        Material type = switch (status) {
+            case VILLAGE -> Material.YELLOW_CONCRETE;
+            case MINE -> Material.EMERALD_BLOCK;
+            case TAKEN -> Material.RED_CONCRETE;
+            case FREE -> Material.LIGHT_GRAY_CONCRETE;
+        };
+        Component name = switch (status) {
+            case VILLAGE -> Ui.line("마을 구역", NamedTextColor.YELLOW);
+            case MINE -> Ui.line("내 땅", NamedTextColor.GREEN);
+            case TAKEN -> Ui.line(ownerName(owner) + "의 땅", NamedTextColor.RED);
+            case FREE -> Ui.line("빈 땅", NamedTextColor.WHITE);
+        };
+        List<Component> lore = new ArrayList<>(List.of(Ui.line("청크 " + cx + ", " + cz + (here ? " · 현재 위치" : ""), NamedTextColor.GRAY)));
+        if (status == Status.FREE) lore.add(Ui.line(money(next) + " 골드", NamedTextColor.GOLD));
+        lore.add(Ui.line(chosen ? "선택됨" : "누르면 선택합니다. 바로 결제되지 않습니다.", chosen ? NamedTextColor.YELLOW : NamedTextColor.DARK_GRAY));
+        ItemStack icon = Ui.icon(here ? Material.COMPASS : type, name, lore);
+        return chosen ? Ui.glow(icon) : icon;
+    }
+    /** True once the land is paid for. A changed price is not paid: the caller shows the new total first. */
+    private boolean buy(Player player, int cx, int cz, long expected) throws IOException {
+        if (!plugin.survival(player)) return false;
+        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return false; }
         World world = player.getWorld();
         var id = player.getUniqueId();
         Profile profile = store.load(id);
         boolean admin = player.hasPermission("maitycoon.admin");
-        if (!profile.landPermit() && !admin) { plugin.tell(player, "땅 구매 이용권이 필요합니다. 수집 도감을 채워 얻으세요."); return; }
-        if (village.overlaps(world, cx, cz)) { plugin.tell(player, "마을 구역은 살 수 없습니다."); return; }
+        if (!profile.landPermit() && !admin) { plugin.tell(player, "땅 구매 이용권이 필요합니다. 수집 도감을 채워 얻으세요."); return false; }
+        if (village.overlaps(world, cx, cz)) { plugin.tell(player, "마을 구역은 살 수 없습니다."); return false; }
         String key = key(world, cx, cz);
         switch (registry.check(key, id, admin ? Integer.MAX_VALUE : max)) {
-            case TAKEN -> { plugin.tell(player, "이미 주인이 있는 땅입니다."); return; }
-            case LIMIT -> { plugin.tell(player, "땅은 최대 " + max + "개까지 살 수 있습니다."); return; }
+            case TAKEN -> { plugin.tell(player, "이미 주인이 있는 땅입니다."); return false; }
+            case LIMIT -> { plugin.tell(player, "땅은 최대 " + max + "개까지 살 수 있습니다."); return false; }
             case OK -> {}
         }
         long cost = LandRegistry.price(price, step, registry.count(id));
-        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + cost + " / 보유 " + profile.coins()); return; }
+        if (cost != expected) { plugin.tell(player, "땅값이 바뀌었습니다. 금액을 다시 확인해 주세요."); return false; }
+        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return false; }
         registry.put(key, id);
         try {
             plugin.transact(player, "land", key + " -" + cost, () -> {
@@ -221,7 +298,8 @@ final class Lands implements Listener {
             try { save(); } catch (IOException rollback) { plugin.getLogger().log(Level.SEVERE, "Cannot roll back land " + key, rollback); }
             throw e;
         }
-        plugin.tell(player, "땅을 구매했습니다! 청크 " + cx + ", " + cz + " (-" + cost + " 골드)");
+        plugin.tell(player, "땅을 구매했습니다! 청크 " + cx + ", " + cz + " (-" + money(cost) + " 골드)");
+        return true;
     }
     /** The banner text for where the player stands, or null when there is nothing to buy here. */
     String bannerText(Player player) {
@@ -266,20 +344,39 @@ final class Lands implements Listener {
         if (world == null || !world.equals(at.getWorld())) { plugin.tell(player, "땅은 마을이 있는 월드에서만 살 수 있습니다."); return; }
         int cx = LandRegistry.chunkOf(at.getBlockX()), cz = LandRegistry.chunkOf(at.getBlockZ());
         if (village.overlaps(world, cx, cz)) { plugin.tell(player, "마을 구역은 살 수 없습니다."); return; }
-        BuyHolder holder = new BuyHolder(cx, cz);
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "땅 구매"));
+        plugin.guarded(player, () -> showBuy(player, cx, cz, false));
+    }
+    private void showBuy(Player player, int cx, int cz, boolean bought) throws IOException {
+        BuyHolder holder = new BuyHolder(cx, cz, nextPrice(player), bought);
+        Profile profile = store.load(player.getUniqueId());
+        int owned = registry.count(player.getUniqueId()), x = LandRegistry.firstBlock(cx), z = LandRegistry.firstBlock(cz), size = LandRegistry.CHUNK_SIZE;
+        long after = profile.coins() - holder.cost;
+        String blocksX = x + "~" + (x + size - 1), blocksZ = z + "~" + (z + size - 1);
+        boolean drawn = plugin.packDrawn(player);
+        String yes = bought ? "경계 보기" : "구매 확정", no = bought ? "농장 관리" : "돌아가기";
+        Component title = Component.text(bought ? "구매 완료" : "땅 구매 확인");
+        if (drawn) {
+            var card = new ShopTitle().screen(0xEB00).value(22, 72, cx + "," + cz).value(32, 72, blocksX).value(42, 72, blocksZ);
+            if (bought) card.label(52, 72, "구매 완료").value(62, 72, money(profile.coins())).value(82, 72, owned + "/" + max);
+            else {
+                card.value(52, 72, money(holder.cost)).value(62, 72, money(profile.coins())).value(82, 72, (owned + 1) + "/" + max);
+                if (after < 0) card.label(72, 72, "골드 부족");
+                else card.value(72, 72, money(after));
+            }
+            card.label(92, 72, permitted(player, profile) ? "소모 없음" : "필요").onBlue(true).label(112, 34, yes).onBlue(false).label(112, 124, no);
+            title = card.build();
+        }
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, title);
         plugin.frame(holder.inventory, player);
-        int owned = registry.count(player.getUniqueId());
-        int x = LandRegistry.firstBlock(cx), z = LandRegistry.firstBlock(cz), size = LandRegistry.CHUNK_SIZE;
-        holder.inventory.setItem(13, Ui.icon(Material.GRASS_BLOCK, Ui.line("청크 " + cx + ", " + cz, NamedTextColor.YELLOW), List.of(
+        if (!drawn) holder.inventory.setItem(MenuLayout.BUY_SUMMARY, Ui.icon(Material.GRASS_BLOCK, Ui.line("청크 " + cx + ", " + cz, NamedTextColor.YELLOW), List.of(
             Ui.line("범위 X " + x + " ~ " + (x + size - 1) + ", Z " + z + " ~ " + (z + size - 1) + " (" + size + "×" + size + ")", NamedTextColor.GRAY),
-            Ui.line(String.format("가격 %,d 골드", LandRegistry.price(price, step, owned)), NamedTextColor.GOLD),
-            Ui.line("보유 " + owned + " / " + max, NamedTextColor.GRAY))));
-        ItemStack yes = Ui.icon(Material.LIME_CONCRETE, Ui.line("구매", NamedTextColor.GREEN), List.of());
-        ItemStack no = Ui.icon(Material.RED_CONCRETE, Ui.line("취소", NamedTextColor.RED), List.of());
-        for (int slot : List.of(30, 31, 32)) holder.inventory.setItem(slot, yes);
-        for (int slot : List.of(39, 40, 41)) holder.inventory.setItem(slot, no);
-        holder.inventory.setItem(DEX, Ui.icon(Material.BOOK, Ui.line("수집 도감 열기", NamedTextColor.YELLOW), List.of()));
+            Ui.line("가격 " + money(holder.cost) + " 골드", NamedTextColor.GOLD),
+            Ui.line("현재 잔액 " + money(profile.coins()) + " 골드", NamedTextColor.GRAY),
+            Ui.line(after < 0 ? "골드가 부족합니다." : "구매 후 잔액 " + money(after) + " 골드", after < 0 ? NamedTextColor.RED : NamedTextColor.GRAY),
+            Ui.line("구매 후 보유 " + (owned + 1) + " / " + max, NamedTextColor.GRAY),
+            Ui.line("이용권 " + (permitted(player, profile) ? "보유 · 소모 없음" : "필요"), NamedTextColor.GRAY))));
+        Ui.button(holder.inventory, MenuLayout.BUY_YES, drawn, Ui.icon(Material.LIME_CONCRETE, Ui.line(yes, NamedTextColor.GREEN), List.of()));
+        Ui.button(holder.inventory, MenuLayout.BUY_NO, drawn, Ui.icon(bought ? Material.WRITABLE_BOOK : Material.ARROW, Ui.line(no, NamedTextColor.WHITE), List.of()));
         player.openInventory(holder.inventory);
     }
     @EventHandler(ignoreCancelled = true)
@@ -304,9 +401,8 @@ final class Lands implements Listener {
         banners.remove(id);
         shown.remove(id);
     }
-    private void showBorder(Player player) {
-        Chunk chunk = player.getLocation().getChunk();
-        int x = chunk.getX() << 4, z = chunk.getZ() << 4;
+    private void showBorder(Player player, int chunkX, int chunkZ) {
+        int x = chunkX << 4, z = chunkZ << 4;
         plugin.tell(player, "청크 경계를 표시합니다.");
         int[] left = {8};
         plugin.getServer().getScheduler().runTaskTimer(plugin, task -> {
@@ -317,33 +413,51 @@ final class Lands implements Listener {
             }
         }, 0L, 10L);
     }
+    private void later(Player player, MaiTycoonPlugin.Action action) {
+        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, action));
+    }
     private void buyClick(InventoryClickEvent event, BuyHolder holder) {
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player) || event.getClick() != ClickType.LEFT) return;
         int slot = event.getRawSlot();
-        if (slot == DEX) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openDex(player)); return; }
-        if (slot >= 30 && slot <= 32 && !holder.done) {
-            holder.done = true;
-            plugin.guarded(player, () -> buy(player, holder.chunkX, holder.chunkZ));
-        } else if (slot < 39 || slot > 41) return;
-        plugin.getServer().getScheduler().runTask(plugin, () -> player.closeInventory());
+        if (holder.bought) {
+            if (MenuLayout.BUY_YES.contains(slot)) later(player, () -> { player.closeInventory(); showBorder(player, holder.chunkX, holder.chunkZ); });
+            else if (MenuLayout.BUY_NO.contains(slot)) later(player, () -> farmMenu.open(player));
+            return;
+        }
+        if (MenuLayout.BUY_NO.contains(slot)) { later(player, () -> open(player)); return; }
+        if (!MenuLayout.BUY_YES.contains(slot) || holder.done) return;
+        holder.done = true;
+        plugin.guarded(player, () -> {
+            boolean paid = buy(player, holder.chunkX, holder.chunkZ, holder.cost);
+            later(player, () -> {
+                if (paid || nextPrice(player) != holder.cost) showBuy(player, holder.chunkX, holder.chunkZ, paid);
+                else open(player);
+            });
+        });
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (event.getView().getTopInventory().getHolder() instanceof BuyHolder buying) { buyClick(event, buying); return; }
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
         event.setCancelled(true);
-        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!(event.getWhoClicked() instanceof Player player) || (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.RIGHT)) return;
         int raw = event.getRawSlot();
-        if (raw == SHOW) { player.closeInventory(); showBorder(player); return; }
-        if (raw == FARM) { plugin.getServer().getScheduler().runTask(plugin, () -> farmMenu.open(player)); return; }
-        if (raw == AUTO_PLANT || raw == LAMP) {
-            plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> plugin.openLandTool(player, raw == LAMP)));
+        if (MenuLayout.LAND_BORDER.contains(raw)) { later(player, () -> { player.closeInventory(); showBorder(player, holder.chosenX, holder.chosenZ); }); return; }
+        if (MenuLayout.LAND_FARM.contains(raw)) { later(player, () -> farmMenu.open(player)); return; }
+        if (MenuLayout.LAND_CONFIRM.contains(raw)) {
+            plugin.guarded(player, () -> {
+                List<Component> reasons = refusal(player, store.load(player.getUniqueId()), holder.chosenX, holder.chosenZ);
+                if (reasons.isEmpty()) later(player, () -> showBuy(player, holder.chosenX, holder.chosenZ, false));
+                else player.sendMessage(reasons.get(0));
+            });
             return;
         }
-        int[] chunk = holder.chunks.get(raw);
-        if (chunk == null || event.getClick() != ClickType.RIGHT) return;
-        plugin.guarded(player, () -> { buy(player, chunk[0], chunk[1]); render(holder, player); });
+        int[] chunk = MenuLayout.LAND_HOME.contains(raw) ? new int[]{holder.centerX, holder.centerZ} : holder.chunks.get(raw);
+        if (chunk == null) return;
+        holder.chosenX = chunk[0];
+        holder.chosenZ = chunk[1];
+        plugin.guarded(player, () -> { render(holder, player, store.load(player.getUniqueId())); showLater(holder, player); });
     }
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
@@ -353,6 +467,10 @@ final class Lands implements Listener {
     List<String> ownedKeys(UUID owner) { return registry.parcels().entrySet().stream().filter(entry -> entry.getValue().owner().equals(owner)).map(Map.Entry::getKey).toList(); }
     /** Neither bought land nor anywhere the village keeps for itself. */
     boolean wild(Block block) { return owner(block) == null && !village.overlaps(block.getWorld(), block.getX() >> 4, block.getZ() >> 4); }
+    /** Keys are world:x:z, so the coordinates can be read without loading the chunk. */
+    List<String> parcelNames(Player player) {
+        return ownedKeys(player.getUniqueId()).stream().map(key -> key.split(":")).map(parts -> "청크 " + parts[1] + ", " + parts[2]).sorted().toList();
+    }
     boolean owned(org.bukkit.Chunk chunk) { return registry.owner(key(chunk.getWorld(), chunk.getX(), chunk.getZ())) != null; }
     void openFarm(Player player) { farmMenu.open(player); }
     List<FootprintLog.Footprint> reportable(Player player) { return footprints.reportable(player.getUniqueId(), System.currentTimeMillis()); }

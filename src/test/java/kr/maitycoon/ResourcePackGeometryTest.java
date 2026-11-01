@@ -19,7 +19,7 @@ class ResourcePackGeometryTest {
                     // All current PNGs contain cells no larger than the entire texture.
                     assertTrue(image.getWidth() <= 256 && image.getHeight() <= 256,
                         "Oversized bitmap glyph: " + entry.getName());
-                    if (entry.getName().matches(".*/(sell|buy|build|panel|furniture|lamp)_\\d_\\d.png")) {
+                    if (entry.getName().matches(".*/(sell|buy|build|panel|furniture|lamp|lampuse|land|landbuy)_\\d_\\d.png")) {
                         tiles++;
                         assertEquals(ShopLayout.TILE_WIDTH * 4, image.getWidth());
                         assertNotEquals(0, image.getRGB(image.getWidth() - 1, image.getHeight() - 1) >>> 24,
@@ -28,6 +28,6 @@ class ResourcePackGeometryTest {
                 }
             }
         }
-        assertEquals(6 * ShopLayout.TILE_COLUMNS * ShopLayout.TILE_ROWS, tiles);
+        assertEquals(9 * ShopLayout.TILE_COLUMNS * ShopLayout.TILE_ROWS, tiles);
     }
 }

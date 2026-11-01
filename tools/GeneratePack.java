@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.List;
 import java.util.zip.*;
 import javax.imageio.ImageIO;
+import kr.maitycoon.MenuLayout;
 import kr.maitycoon.MiniMapTitle;
 import kr.maitycoon.ShopLayout;
 
@@ -19,7 +20,7 @@ import kr.maitycoon.ShopLayout;
 public class GeneratePack {
     static final int SCALE = 4, WIDTH = ShopLayout.GUI_WIDTH, HEIGHT = ShopLayout.BACKGROUND_HEIGHT, SLOT = ShopLayout.SLOT, TOP = ShopLayout.TOP, FOOTER = ShopLayout.FOOTER_ROW;
     static final int PACK_FORMAT = 75;
-    static final String DIGITS = "0123456789,-▲▼KMB/:";
+    static final String DIGITS = "0123456789,-▲▼KMB/:%+~";
     static final int DIGIT_W = 3, DIGIT_H = 6;
     static final Color WOOD = new Color(0x4A3020), WOOD_LIGHT = new Color(0x6B4A30), PAPER = new Color(0xF0E4C8),
         PAPER_DARK = new Color(0xD8C49A), WELL = new Color(0xFFF8E8), LINE = new Color(0xB89C6C), INK = new Color(0x3A2818), CREAM = new Color(0xFFF2D0);
@@ -30,10 +31,18 @@ public class GeneratePack {
         backgroundTiles("sell", background("농산물 상점", List.of("전체", "곡물", "과일", "특수", "특산"), GOLD));
         backgroundTiles("buy", background("씨앗 상점", List.of("전체", "씨앗", "모종", "비료", "특산"), GREEN));
         backgroundTiles("panel", panel());
-        backgroundTiles("lamp", lampScreen());
+        backgroundTiles("lamp", lampShop());
+        backgroundTiles("lampuse", lampUse());
+        backgroundTiles("land", landMap());
+        backgroundTiles("landbuy", landConfirm());
         backgroundTiles("furniture", background("가구 상점", List.of("전체", "침대", "조명", "수납", "장식"), GOLD));
         backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식", "색상"), GOLD));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
+        png("assets/maitycoon/textures/gui/selected.png", selectedCell());
+        png("assets/maitycoon/textures/gui/dim_wide.png", dimmed(72));
+        png("assets/maitycoon/textures/gui/dim_short.png", dimmed(54));
+        text("assets/maitycoon/items/blank.json", "{\"model\":{\"type\":\"minecraft:empty\"}}");
+        menuText();
         npcSkins();
         miniMapFonts();
         // The land banner is only text; an empty white bar keeps it from looking like a boss fight.
@@ -346,45 +355,154 @@ public class GeneratePack {
         box(g,fill,x,y,w,h,1);
         outline(g,new Color(0x887D70),x,y,w,h,1);
     }
-    /** Target, current option and lamp stock on top, the options the tool can get below, three buttons at the bottom. */
-    static BufferedImage lampScreen() {
-        var image=new BufferedImage(WIDTH*SCALE,HEIGHT*SCALE,BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g=paint(image);
-        Color accent=new Color(0xE9D49C);
-        box(g,new Color(0x211E1C),0,0,WIDTH,HEIGHT,0);
-        box(g,new Color(0x3A2A18),0,0,WIDTH,14,0);
-        g.setColor(accent);g.fillRect(0,14*SCALE,WIDTH*SCALE,SCALE/2);
-        g.setFont(font(8,true));g.drawString("생활 램프",7*SCALE,10*SCALE);
-        String[] labels={"대상 도구","현재 능력","보유 램프"};
-        int[] columns={1,4,7};
-        for(int i=0;i<3;i++){
-            int x=7+columns[i]*18;
-            box(g,new Color(0x302B29),x-14,16,46,38,0);
-            outline(g,new Color(0x675B4B),x-14,16,46,38,0);
-            box(g,accent,x-14,16,46,1,0);
-            centered(g,labels[i],font(5,true),CREAM,x+9,26);
-            box(g,new Color(0x393632),x,35,18,18,0);
-            box(g,new Color(0x2A2725),x+1,36,16,16,0);
-            outline(g,accent,x,35,18,18,0);
+    static final Color CHARCOAL = new Color(0x211E1C), CARD = new Color(0x302B29), LINE_GOLD = new Color(0xE9D49C), BODY = new Color(0xF4EBDD), MUTED = new Color(0xBDB2A3), BUY_BLUE = new Color(0x77B9D5), EDGE = new Color(0x675B4B);
+    /** Charcoal screen with a thin gold title rule and the player's own inventory underneath. */
+    static Graphics2D screen(BufferedImage image, String title) {
+        Graphics2D g = paint(image);
+        box(g, CHARCOAL, 0, 0, WIDTH, HEIGHT, 0);
+        g.setColor(LINE_GOLD);
+        g.fillRect(0, 14 * SCALE, WIDTH * SCALE, SCALE / 2);
+        g.setFont(font(8, true));
+        g.drawString(title, 7 * SCALE, 10 * SCALE);
+        box(g, new Color(0x181818), 3, 130, 170, 89, 0);
+        for (int row = 0; row < 4; row++) for (int col = 0; col < 9; col++) {
+            int y = row == 3 ? 198 : 140 + row * 18;
+            box(g, new Color(0x393632), 7 + col * 18, y - 1, 18, 18, 0);
+            box(g, new Color(0x252423), 8 + col * 18, y, 16, 16, 0);
         }
-        centered(g,"이 도구에 붙을 수 있는 능력",font(5,true),accent,88,63);
-        for(int row=3;row<5;row++)for(int col=0;col<9;col++){
-            box(g,new Color(0x393632),7+col*18,17+row*18,18,18,0);
-            box(g,new Color(0x2A2725),8+col*18,18+row*18,16,16,0);
+        return g;
+    }
+    static BufferedImage canvas() { return new BufferedImage(WIDTH * SCALE, HEIGHT * SCALE, BufferedImage.TYPE_INT_ARGB); }
+    static void card(Graphics2D g, int x, int y, int w, int h) {
+        box(g, CARD, x, y, w, h, 0);
+        outline(g, EDGE, x, y, w, h, 0);
+        box(g, LINE_GOLD, x, y, w, 1, 0);
+    }
+    static void left(Graphics2D g, String text, Font font, Color color, int x, double centerY) {
+        g.setFont(font);
+        g.setColor(color);
+        var metrics = g.getFontMetrics();
+        g.drawString(text, x * SCALE, (float) (centerY * SCALE + (metrics.getAscent() - metrics.getDescent()) / 2.0));
+    }
+    /** A wide button covers exactly its slots in the bottom row. */
+    static void wide(Graphics2D g, List<Integer> slots, Color fill, String text, Color ink) {
+        int x = MenuLayout.slotX(slots.get(0)) - 1, w = slots.size() * MenuLayout.COLUMN - 1;
+        button(g, x, 108, w, 18, fill);
+        if (text != null) centered(g, text, font(6, true), ink, x + w / 2.0, 117);
+    }
+    static BufferedImage lampShop() {
+        var image = canvas();
+        Graphics2D g = screen(image, "램프 상점");
+        card(g, 7, 17, 162, 57);
+        box(g, new Color(0x2A2725), 8, 36, 16, 16, 0);
+        outline(g, LINE_GOLD, 7, 35, 18, 18, 0);
+        left(g, "생활 도구 전용 램프", font(7, true), BODY, 28, 28);
+        left(g, "생활 도구에 무작위 능력을 부여합니다", font(5, false), MUTED, 28, 40);
+        left(g, "보유", font(5, false), MUTED, 8, 62);
+        button(g, 43, 54, 90, 18, BUY_BLUE);
+        left(g, "구매 ·", font(6, true), new Color(0x142530), 50, 63);
+        left(g, "잔액", font(5, false), MUTED, 8, 118);
+        centered(g, "닫기", font(5, true), BODY, 161, 27);
+        outline(g, EDGE, 153, 19, 16, 16, 0);
+        wide(g, MenuLayout.SHOP_USE, new Color(0x3F6C42), "램프 사용", CREAM);
+        g.dispose();
+        return image;
+    }
+    static BufferedImage lampUse() {
+        var image = canvas();
+        Graphics2D g = screen(image, "생활 램프");
+        centered(g, "뒤로", font(5, true), BODY, 161, 27);
+        outline(g, EDGE, 153, 19, 16, 16, 0);
+        card(g, 7, 17, 144, 37);
+        left(g, "대상 도구", font(5, true), MUTED, 30, 27);
+        box(g, new Color(0x2A2725), 8, 36, 16, 16, 0);
+        outline(g, LINE_GOLD, 7, 35, 18, 18, 0);
+        left(g, "현재 능력", font(5, true), MUTED, 8, 62);
+        left(g, "이전 능력", font(5, true), MUTED, 8, 72);
+        g.setColor(EDGE);
+        g.fillRect(7 * SCALE, 80 * SCALE, 162 * SCALE, SCALE / 2);
+        left(g, "무작위 능력이 붙습니다. 기존 능력은 사라집니다.", font(5, false), new Color(0xE8A29A), 8, 87);
+        left(g, "사용 램프 1개", font(5, false), MUTED, 8, 98);
+        left(g, "보유", font(5, false), MUTED, 110, 98);
+        wide(g, MenuLayout.USE_LIST, new Color(0x3A332E), "가능한 능력 보기", CREAM);
+        wide(g, MenuLayout.USE_APPLY, new Color(0x3F6C42), "1회 적용", CREAM);
+        g.dispose();
+        return image;
+    }
+    static BufferedImage landMap() {
+        var image = canvas();
+        Graphics2D g = screen(image, "토지");
+        left(g, "보유", font(5, false), MUTED, 128, 7);
+        for (int row = 0; row < MenuLayout.MAP_ROWS; row++) for (int col = 0; col < MenuLayout.MAP_COLUMNS; col++) {
+            box(g, new Color(0x2A2725), 8 + col * 18, 18 + row * 18, 16, 16, 0);
         }
-        button(g,7,107,53,19,new Color(0x4A3A1E));
-        centered(g,"램프 구매",font(5,true),CREAM,43,113);
-        button(g,61,107,53,19,new Color(0x3F6C42));
-        centered(g,"적용",font(7,true),CREAM,97,116.5);
-        button(g,115,107,54,19,new Color(0x3A332E));
-        centered(g,"닫기",font(7,true),CREAM,151,116.5);
-        box(g,new Color(0x181818),3,130,170,89,0);
-        for(int row=0;row<4;row++)for(int col=0;col<9;col++){
-            int y=row==3?198:140+row*18;
-            box(g,new Color(0x393632),7+col*18,y-1,18,18,0);
-            box(g,new Color(0x252423),8+col*18,y,16,16,0);
+        card(g, 99, 17, 70, 88);
+        left(g, "선택한 땅", font(6, true), LINE_GOLD, 103, 23);
+        String[] rows = {"청크", "상태", "가격", "구매 후", "이용권"};
+        for (int i = 0; i < rows.length; i++) left(g, rows[i], font(5, false), MUTED, 103, 34 + i * 10);
+        String[][] legend = {{"내 땅", "42A65A"}, {"타인", "D96666"}, {"마을", "E8C84A"}, {"빈 땅", "BDB2A3"}};
+        for (int i = 0; i < legend.length; i++) {
+            int x = 103 + i % 2 * 33, y = 84 + i / 2 * 10;
+            box(g, new Color(Integer.parseInt(legend[i][1], 16)), x, y, 5, 5, 0);
+            left(g, legend[i][0], font(5, false), BODY, x + 7, y + 2.5);
         }
-        g.dispose();return image;
+        wide(g, MenuLayout.LAND_BORDER, new Color(0x3A332E), "경계 확인", CREAM);
+        wide(g, MenuLayout.LAND_HOME, new Color(0x3A332E), "내 위치", CREAM);
+        wide(g, MenuLayout.LAND_FARM, new Color(0x3A332E), "농장 관리", CREAM);
+        wide(g, MenuLayout.LAND_CONFIRM, BUY_BLUE, "구매 내용 확인", new Color(0x142530));
+        g.dispose();
+        return image;
+    }
+    static BufferedImage landConfirm() {
+        var image = canvas();
+        Graphics2D g = screen(image, "땅 구매 확인");
+        card(g, 7, 17, 162, 84);
+        String[] rows = {"청크", "블록 X", "블록 Z", "가격", "현재 잔액", "구매 후 잔액", "구매 후 보유", "이용권"};
+        for (int i = 0; i < rows.length; i++) left(g, rows[i], font(5, false), MUTED, 12, 25 + i * 10);
+        wide(g, MenuLayout.BUY_YES, BUY_BLUE, null, CREAM);
+        wide(g, MenuLayout.BUY_NO, new Color(0x3A332E), null, CREAM);
+        g.dispose();
+        return image;
+    }
+    static BufferedImage selectedCell() {
+        var image = new BufferedImage(18 * SCALE, 18 * SCALE, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = paint(image);
+        g.setColor(new Color(0xFFD35E));
+        g.setStroke(new BasicStroke(SCALE));
+        g.drawRect(SCALE / 2, SCALE / 2, 17 * SCALE, 17 * SCALE);
+        g.dispose();
+        image.setRGB(image.getWidth() - 1, image.getHeight() - 1, 0x01FFFFFF);
+        return image;
+    }
+    static BufferedImage dimmed(int w) {
+        var image = new BufferedImage(w, 18, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = paint(image);
+        g.setColor(new Color(0, 0, 0, 0xB0));
+        g.fillRect(0, 0, image.getWidth(), image.getHeight());
+        g.dispose();
+        return image;
+    }
+    /** Fixed labels and digits at every text height. Numbers and names on these screens stay live, never part of a background. */
+    static void menuText() throws IOException {
+        for (int i = 0; i < MenuLayout.LABEL_TEXTS.size(); i++) {
+            // Three times the GUI size, since four would pass the 256px limit at this width.
+            int scale = 3;
+            var image = new BufferedImage(MenuLayout.LABEL_WIDTH * scale, MenuLayout.LABEL_HEIGHT * scale, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = paint(image);
+            g.setColor(BODY);
+            g.setFont(new Font("Nanum Gothic", Font.BOLD, 6 * scale));
+            g.drawString(MenuLayout.LABEL_TEXTS.get(i), 0, 6 * scale);
+            g.dispose();
+            image.setRGB(image.getWidth() - 1, image.getHeight() - 1, 0x01FFFFFF);
+            png("assets/maitycoon/textures/gui/label_" + i + ".png", image);
+        }
+        for (int line = 0; line < MenuLayout.TEXT_LINES; line++) {
+            int y = MenuLayout.textY(line);
+            var labels = new StringJoiner(",");
+            for (int i = 0; i < MenuLayout.LABEL_TEXTS.size(); i++) labels.add(bitmap("label_" + i + ".png", MenuLayout.LABEL_HEIGHT, 13 - y, String.format("\\u%04x", MenuLayout.LABEL_BASE + i)));
+            text("assets/maitycoon/font/t" + line + ".json", "{\"providers\":[" + labels + "]}");
+            text("assets/maitycoon/font/n" + line + ".json", digitFont(6, 13 - y - 1));
+        }
     }
     /** Dark panel with a header line and one well per chest slot, for every menu without its own layout. */
     static BufferedImage panel() {
@@ -444,19 +562,22 @@ public class GeneratePack {
         var g=paint(image);box(g,new Color(0xF2DDA4),1,15,16,1,0);g.dispose();
         image.setRGB(image.getWidth()-1,image.getHeight()-1,0x01FFFFFF);return image;
     }
+    /** Two rows, because one long sheet would pass the 256px the client allows for a glyph sheet. */
+    static final int DIGIT_COLUMNS = DIGITS.length() / 2;
     static BufferedImage digits() {
         int w = DIGIT_W * SCALE, h = DIGIT_H * SCALE;
-        var image = new BufferedImage(w * DIGITS.length(), h, BufferedImage.TYPE_INT_ARGB);
+        var image = new BufferedImage(w * DIGIT_COLUMNS, h * 2, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = paint(image);
         for (int i = 0; i < DIGITS.length(); i++) {
             String glyph = DIGITS.substring(i, i + 1);
+            int x = i % DIGIT_COLUMNS * w, y = i / DIGIT_COLUMNS * h;
             Font font = glyph.equals("▲") || glyph.equals("▼") ? new Font("Apple SD Gothic Neo", Font.PLAIN, 4 * SCALE) : new Font("Menlo", Font.BOLD, (int) (5.2 * SCALE));
             g.setFont(font);
             g.setColor(Color.WHITE);
             var metrics = g.getFontMetrics();
-            g.drawString(glyph, (float) (i * w + (w - metrics.stringWidth(glyph)) / 2.0), (float) (h + metrics.getAscent() - metrics.getDescent()) / 2f);
+            g.drawString(glyph, (float) (x + (w - metrics.stringWidth(glyph)) / 2.0), y + (float) (h + metrics.getAscent() - metrics.getDescent()) / 2f);
             // A nearly invisible pixel in the last column pins the advance, so right-aligned numbers stay exact.
-            image.setRGB(i * w + w - 1, h - 1, 0x01FFFFFF);
+            image.setRGB(x + w - 1, y + h - 1, 0x01FFFFFF);
         }
         g.dispose();
         return image;
@@ -472,21 +593,30 @@ public class GeneratePack {
     static String bitmap(String file, int height, int ascent, String chars) {
         return "{\"type\":\"bitmap\",\"file\":\"maitycoon:gui/" + file + "\",\"height\":" + height + ",\"ascent\":" + ascent + ",\"chars\":[\"" + chars + "\"]}";
     }
+    static final List<String> KINDS = List.of("sell", "buy", "build", "panel", "furniture", "lamp", "lampuse", "land", "landbuy");
+    static final List<Integer> BASES = List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900, 0xE500, 0xE700, 0xEA00, 0xEB00);
     static String guiFont() {
         var providers = new StringJoiner(",");
-        for (int kind = 0; kind < 6; kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
+        for (int kind = 0; kind < KINDS.size(); kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {
             int h = Math.min(TILE_H, HEIGHT - row * TILE_H);
-            providers.add(bitmap(List.of("sell", "buy", "build", "panel", "furniture", "lamp").get(kind) + "_" + row + "_" + col + ".png", h,
-                13 - row * TILE_H, String.format("\\u%04x", List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900, 0xE500).get(kind) + row * 4 + col)));
+            providers.add(bitmap(KINDS.get(kind) + "_" + row + "_" + col + ".png", h,
+                13 - row * TILE_H, String.format("\\u%04x", BASES.get(kind) + row * 4 + col)));
         }
         providers.add(bitmap("tab.png", 17, 13 - 90, "\\ue210"));
+        for (int row = 0; row < MenuLayout.MAP_ROWS; row++) providers.add(bitmap("selected.png", 18, 13 - (MenuLayout.TOP - 1 + row * MenuLayout.COLUMN), String.format("\\u%04x", 0xE240 + row)));
+        providers.add(bitmap("dim_wide.png", 18, 13 - 108, "\\ue250"));
+        providers.add(bitmap("dim_short.png", 18, 13 - 108, "\\ue251"));
         providers.add(bitmap("minimap_frame.png", MINIMAP_FRAME, MINIMAP_TOP - 2, "\\ue221"));
         return "{\"providers\":[" + providers + "]}";
     }
     static String digitFont(int height, int ascent) {
-        var chars = new StringBuilder();
-        for (char c : DIGITS.toCharArray()) chars.append(c < 128 ? String.valueOf(c) : String.format("\\u%04x", (int) c));
-        return "{\"providers\":[" + bitmap("digits.png", height, ascent, chars.toString()) + "]}";
+        var rows = new StringJoiner("\",\"");
+        for (int start = 0; start < DIGITS.length(); start += DIGIT_COLUMNS) {
+            var chars = new StringBuilder();
+            for (char c : DIGITS.substring(start, start + DIGIT_COLUMNS).toCharArray()) chars.append(c < 128 ? String.valueOf(c) : String.format("\\u%04x", (int) c));
+            rows.add(chars);
+        }
+        return "{\"providers\":[" + bitmap("digits.png", height, ascent, rows.toString()) + "]}";
     }
     /** Debug view of the sell screen at SCALE, on a dark backdrop. */
     static BufferedImage preview() throws IOException {

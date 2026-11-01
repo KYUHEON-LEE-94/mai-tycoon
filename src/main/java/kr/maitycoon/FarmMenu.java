@@ -21,7 +21,7 @@ final class FarmMenu implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int BODY_START = 9, BODY_SIZE = 36, BACK = 45, STATUS = 47, WORKERS = 49;
+    private static final int BODY_START = 9, BODY_SIZE = 36, BACK = 45, STATUS = 47, WORKERS = 49, AUTO_PLANT = 51, PARCELS = 53;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
     private final MaiTycoonPlugin plugin;
     private final Lands lands;
@@ -55,7 +55,12 @@ final class FarmMenu implements Listener {
         names.add(Ui.line("작업자는 수확, 파종, 경작만 할 수 있습니다.", NamedTextColor.DARK_GRAY));
         inventory.setItem(WORKERS, Ui.icon(Material.PLAYER_HEAD, Ui.line("작업자 " + (names.size() - 2) + "명", NamedTextColor.GREEN), names));
         inventory.setItem(STATUS, Ui.icon(Material.WHEAT, Ui.line("작물 현황", NamedTextColor.YELLOW), List.of(Ui.line("내 땅의 특산 작물과 수확 시각을 봅니다.", NamedTextColor.GRAY))));
-        inventory.setItem(BACK, Ui.icon(Material.ARROW, Ui.line("땅 지도로", NamedTextColor.WHITE), List.of()));
+        inventory.setItem(AUTO_PLANT, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기", NamedTextColor.YELLOW), List.of(Ui.line("켜고 끄거나 횟수를 삽니다.", NamedTextColor.GRAY))));
+        List<String> parcels = lands.parcelNames(player);
+        List<Component> lines = new ArrayList<>();
+        for (String parcel : parcels) lines.add(Ui.line(parcel, NamedTextColor.GRAY));
+        inventory.setItem(PARCELS, Ui.icon(Material.GRASS_BLOCK, Ui.line("내 땅 " + parcels.size() + "개", NamedTextColor.GREEN), lines));
+        inventory.setItem(BACK, Ui.icon(Material.ARROW, Ui.line("토지로", NamedTextColor.WHITE), List.of()));
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
@@ -65,6 +70,7 @@ final class FarmMenu implements Listener {
         int slot = event.getRawSlot();
         if (slot == BACK) { plugin.getServer().getScheduler().runTask(plugin, () -> lands.open(player)); return; }
         if (slot == STATUS) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openFarmStatus(player)); return; }
+        if (slot == AUTO_PLANT) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> plugin.openAutoPlant(player))); return; }
         String id = holder.footprints.get(slot);
         if (id == null || event.getClick() != ClickType.RIGHT) return;
         plugin.guarded(player, () -> { lands.report(player, id); render(holder, player); });

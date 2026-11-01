@@ -12,6 +12,7 @@ final class ShopTitle {
     private static final TextColor GOLD=TextColor.color(0xF2DDA4);
     private final TextComponent.Builder title=Component.text().color(NamedTextColor.WHITE);
     private int cursor=8;
+    private TextColor ink=null;
     private void moveTo(int x){
         int delta=x-cursor;cursor=x;StringBuilder spaces=new StringBuilder();
         int base=delta<0?0xE000:0xE100,left=Math.abs(delta);
@@ -31,8 +32,28 @@ final class ShopTitle {
         tiles(switch(kind){case SELL->0xE300;case BUY->0xE400;case BUILD->0xE600;case FURNITURE->0xE900;});
         return this;
     }
-    /** The lamp screen has its own background; the price sits on the drawn buy button. */
-    ShopTitle lamp(long price){tiles(0xE500);number("footer",27,compact(price));put(Key.key("maitycoon","footer"),"\uE220",NamedTextColor.WHITE,14);return this;}
+    /** A full-size background with no shop layout. Its text comes from label() and value(). */
+    ShopTitle screen(int base){tiles(base);return this;}
+    /** A prepared label at a text height; x left at -1 continues after the previous text. */
+    ShopTitle label(int y,int x,String id){
+        int index=MenuLayout.LABEL_IDS.indexOf(id);
+        if(index<0)throw new IllegalArgumentException("No label "+id);
+        if(x>=0)moveTo(x);
+        put(Key.key("maitycoon","t"+MenuLayout.textLine(y)),String.valueOf((char)(MenuLayout.LABEL_BASE+index)),ink==null?NamedTextColor.WHITE:ink,MenuLayout.LABEL_WIDTH+1);
+        return this;
+    }
+    /** Digits never shorten an amount here, because these screens state what is about to be paid. */
+    ShopTitle value(int y,int x,String text){
+        if(x>=0)moveTo(x);
+        put(Key.key("maitycoon","n"+MenuLayout.textLine(y)),text,ink==null?GOLD:ink,text.length()*4);
+        return this;
+    }
+    /** Dark text for the blue buy button, where the usual light colours cannot be read. */
+    ShopTitle onBlue(boolean blue){ink=blue?TextColor.color(0x142530):null;return this;}
+    /** Pulls the cursor back over the empty right side of a label, so the next text can follow its last letter. */
+    ShopTitle back(int width){moveTo(cursor-width);return this;}
+    ShopTitle selected(int column,int row){moveTo(MenuLayout.LEFT+column*MenuLayout.COLUMN-1);put(GUI,String.valueOf((char)(0xE240+row)),NamedTextColor.WHITE,19);return this;}
+    ShopTitle dimmed(int x,boolean wide){moveTo(x);put(GUI,wide?"\ue250":"\ue251",NamedTextColor.WHITE,wide?73:55);return this;}
     private void tiles(int base){
         for(int row=0;row<ShopLayout.TILE_ROWS;row++)for(int col=0;col<4;col++){
             moveTo(col*44);put(GUI,String.valueOf((char)(base+row*4+col)),NamedTextColor.WHITE,45);

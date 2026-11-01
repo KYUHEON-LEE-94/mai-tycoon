@@ -240,10 +240,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     boolean wild(org.bukkit.block.Block block) { return lands.wild(block); }
     void lampHarvest(Player player, org.bukkit.block.Block block, org.bukkit.inventory.ItemStack crop, org.bukkit.inventory.ItemStack seed) { lamps.harvest(player, block, crop, seed); }
     Component menuTitle(Player player, String title) { return shop.drawn(player) ? new ShopTitle().panel(title).build() : Component.text(title); }
-    void openLandTool(Player player, boolean lamp) throws IOException {
-        if (lamp) lamps.open(player);
-        else autoPlanting.open(player);
-    }
+    void openAutoPlant(Player player) throws IOException { autoPlanting.open(player); }
     void frame(org.bukkit.inventory.Inventory inventory, Player player) {
         if (shop.drawn(player)) inventory.clear();
         else Ui.frame(inventory);
@@ -407,7 +404,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     player.sendMessage(Component.text("[마이 타이쿤] ", NamedTextColor.GREEN).append(Component.keybind("key.swapOffhand", NamedTextColor.YELLOW)).append(Component.text(" 키를 누르면 도감이 열립니다. 구매할 수 있는 땅에서는 구매 화면이 열립니다. 손 바꾸기는 웅크린 채 누르세요.", NamedTextColor.WHITE)));
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
-                    tell(player, "/tycoon lamp — 생활 램프 구매, 손에 든 도구에 적용");
+                    tell(player, "/tycoon lamp — 램프 상점과 도구 적용");
                     tell(player, "/tycoon autoplant — 자동 심기 설정");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");

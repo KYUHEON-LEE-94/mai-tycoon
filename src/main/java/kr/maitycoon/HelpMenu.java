@@ -55,8 +55,8 @@ final class HelpMenu implements Listener {
             text("남이 내 땅의 작물을 거두면 발자국이 남고 신고할 수 있습니다."))));
         inventory.setItem(30, entry(Material.GLOWSTONE_DUST, "생활 램프와 자동 심기", List.of(
             text("램프 상인에게 골드로 램프를 삽니다."),
-            text("괭이, 곡괭이, 삽, 도끼를 든 채 램프 상인을 누르면 능력을 붙입니다."),
-            text("자동 심기는 토지 관리인 메뉴에서 켭니다."))));
+            text("도구를 들고 램프 상점의 램프 사용을 누르면 능력이 붙습니다."),
+            text("자동 심기는 토지 관리인의 농장 관리에서 켭니다."))));
         inventory.setItem(32, entry(Material.CHEST, "상인", List.of(
             text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽 상점에 함께 있습니다."),
             text("건축 자재 상인, 가구 상인도 광장에 있습니다."),

@@ -29,15 +29,24 @@ import org.bukkit.persistence.PersistentDataType;
 
 /** Applies life lamps to tools and pays out their options. */
 final class Lamps implements Listener {
+    private enum Screen { SHOP, USE, OPTIONS }
     private static final class Holder implements InventoryHolder {
+        private final Screen screen;
         private final int slot;
-        private boolean used;
+        private final LifeLamp.Option previous;
+        private final long readyAt;
+        private boolean used, reopening;
         private Inventory inventory;
-        private Holder(int slot) { this.slot = slot; }
+        private Holder(Screen screen, int slot, LifeLamp.Option previous, long readyAt) {
+            this.screen = screen;
+            this.slot = slot;
+            this.previous = previous;
+            this.readyAt = readyAt;
+        }
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int TARGET = 10, CURRENT = 13, STOCK = 16, LIST_START = 27, LIST_SIZE = 18;
-    private static final List<Integer> BUY = List.of(45, 46, 47), YES = List.of(48, 49, 50), NO = List.of(51, 52, 53);
+    private static final int BULK = 64, OPTIONS_START = 9, OPTIONS_SIZE = 36, OPTIONS_BACK = 45;
+    private static final long RETRY_MILLIS = 400;
     private static final Map<Material, Material> CROPS = Map.of(Material.WHEAT, Material.WHEAT, Material.CARROTS, Material.CARROT, Material.POTATOES, Material.POTATO, Material.BEETROOTS, Material.BEETROOT);
     private static final Map<Material, Material> SEEDS = Map.of(Material.WHEAT, Material.WHEAT_SEEDS, Material.CARROTS, Material.CARROT, Material.POTATOES, Material.POTATO, Material.BEETROOTS, Material.BEETROOT_SEEDS);
     private static final Map<Material, Material> SMELTED = Map.of(Material.RAW_IRON, Material.IRON_INGOT, Material.RAW_GOLD, Material.GOLD_INGOT, Material.RAW_COPPER, Material.COPPER_INGOT, Material.ANCIENT_DEBRIS, Material.NETHERITE_SCRAP);
@@ -65,12 +74,56 @@ final class Lamps implements Listener {
         meta.lore(List.of(Ui.line("생활 램프", NamedTextColor.GOLD), Ui.line(option.describe(), NamedTextColor.YELLOW)));
         item.setItemMeta(meta);
     }
-    /** Opens with or without a tool or lamps, because this is also where lamps are bought. */
-    void open(Player player) throws IOException {
-        Holder holder = new Holder(player.getInventory().getHeldItemSlot());
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.packDrawn(player) ? new ShopTitle().lamp(price).build() : Component.text("생활 램프"));
+    /** The merchant's shop. Buying needs no tool; using a lamp is a screen of its own. */
+    void open(Player player) throws IOException { show(player, Screen.SHOP, null, 0); }
+    private void show(Player player, Screen screen, LifeLamp.Option previous, long readyAt) throws IOException {
+        Holder holder = new Holder(screen, player.getInventory().getHeldItemSlot(), previous, readyAt);
+        Profile profile = store.load(player.getUniqueId());
+        boolean drawn = plugin.packDrawn(player);
+        Component title = switch (screen) {
+            case SHOP -> drawn ? shopTitle(profile) : Component.text("램프 상점");
+            case USE -> drawn ? useTitle(player, profile, previous) : Component.text("생활 램프");
+            case OPTIONS -> plugin.menuTitle(player, "가능한 능력");
+        };
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, title);
         render(holder, player);
         player.openInventory(holder.inventory);
+    }
+    private void showLater(Player player, Holder holder, LifeLamp.Option previous, long readyAt) {
+        if (holder.reopening) return;
+        holder.reopening = true;
+        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> {
+            if (player.getOpenInventory().getTopInventory().getHolder() == holder) show(player, holder.screen, previous, readyAt);
+        }));
+    }
+    private void showNext(Player player, Screen screen) {
+        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> show(player, screen, null, 0)));
+    }
+    private static String money(long value) { return String.format("%,d", value); }
+    private Component shopTitle(Profile profile) {
+        return new ShopTitle().screen(0xE500)
+            .value(62, 18, money(profile.lamps())).label(62, -1, "개")
+            .onBlue(true).value(62, 76, money(price)).label(62, -1, "골드").onBlue(false)
+            .value(117, 24, money(profile.coins())).label(117, -1, "골드")
+            .value(117, 82, "1/1").build();
+    }
+    private void describe(ShopTitle title, int y, LifeLamp.Option option) {
+        title.label(y, 44, "KIND_" + option.kind());
+        if (option.kind() == LifeLamp.Kind.AREA) title.back(40).value(y, -1, option.amount() == 2 ? "+2" : "+4");
+        else if (option.percent() < 100) title.back(40).value(y, -1, option.percent() + "% +" + option.amount());
+        else if (option.kind() == LifeLamp.Kind.TREE) title.back(40).value(y, -1, "+" + option.amount());
+    }
+    private Component useTitle(Player player, Profile profile, LifeLamp.Option previous) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        LifeLamp.Option current = option(hand);
+        ShopTitle title = new ShopTitle().screen(0xE700);
+        title.label(42, 30, tool(hand) == null ? "도구 없음" : hand.getType().name());
+        if (current == null) title.label(62, 44, "없음");
+        else describe(title, 62, current);
+        if (previous != null) describe(title, 72, previous);
+        title.value(97, 126, money(profile.lamps())).label(97, -1, "개");
+        if (tool(hand) == null || profile.lamps() < 1) title.dimmed(MenuLayout.slotX(MenuLayout.USE_APPLY.get(0)) - 1, true);
+        return title.build();
     }
     private static Material icon(LifeLamp.Kind kind) {
         return switch (kind) {
@@ -91,71 +144,109 @@ final class Lamps implements Listener {
             case TREE -> Material.OAK_LOG;
         };
     }
-    private void button(Holder holder, boolean drawn, List<Integer> slots, ItemStack icon) {
-        // The drawn button has its label beside the icon, so only the plain screen fills the whole width.
-        for (int slot : drawn ? slots.subList(0, 1) : slots) holder.inventory.setItem(slot, icon);
-    }
     private void render(Holder holder, Player player) throws IOException {
         plugin.frame(holder.inventory, player);
+        Profile profile = store.load(player.getUniqueId());
+        switch (holder.screen) {
+            case SHOP -> renderShop(holder, player, profile);
+            case USE -> renderUse(holder, player, profile);
+            case OPTIONS -> renderOptions(holder, player);
+        }
+    }
+    private void renderShop(Holder holder, Player player, Profile profile) {
+        boolean drawn = plugin.packDrawn(player);
+        holder.inventory.setItem(MenuLayout.SHOP_ICON, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 도구 전용 램프", NamedTextColor.GOLD), List.of(
+            Ui.line("보유 " + money(profile.lamps()) + "개", NamedTextColor.GRAY), Ui.line("괭이, 곡괭이, 삽, 도끼에 무작위 능력을 붙입니다.", NamedTextColor.GRAY))));
+        Ui.button(holder.inventory, MenuLayout.SHOP_BUY, drawn, Ui.icon(Material.GOLD_INGOT, Ui.line("구매 · " + money(price) + " 골드", NamedTextColor.AQUA), List.of(
+            Ui.line("좌클릭 시 1개 구매", NamedTextColor.GRAY),
+            Ui.line("쉬프트+좌클릭 시 " + BULK + "개 구매 · " + money(price * BULK) + " 골드", NamedTextColor.GRAY),
+            Ui.line("잔액 " + money(profile.coins()) + " 골드", NamedTextColor.YELLOW))));
+        Ui.button(holder.inventory, MenuLayout.SHOP_USE, drawn, Ui.icon(Material.ENCHANTED_BOOK, Ui.line("램프 사용", NamedTextColor.GREEN), List.of(Ui.line("손에 든 도구에 램프를 씁니다.", NamedTextColor.GRAY))));
+        Ui.button(holder.inventory, List.of(MenuLayout.SHOP_CLOSE), drawn, Ui.icon(Material.BARRIER, Ui.line("닫기", NamedTextColor.RED), List.of()));
+    }
+    private void renderUse(Holder holder, Player player, Profile profile) {
         boolean drawn = plugin.packDrawn(player);
         ItemStack hand = player.getInventory().getItemInMainHand();
-        Profile profile = store.load(player.getUniqueId());
         LifeLamp.Tool tool = tool(hand);
         LifeLamp.Option current = option(hand);
-        if (tool == null) holder.inventory.setItem(TARGET, Ui.icon(Material.BARRIER, Ui.line("도구를 손에 들고 여세요", NamedTextColor.RED), List.of(Ui.line("괭이, 곡괭이, 삽, 도끼에 쓸 수 있습니다.", NamedTextColor.GRAY), Ui.line("램프 구매는 도구 없이도 됩니다.", NamedTextColor.GRAY))));
-        else holder.inventory.setItem(TARGET, Ui.decorate(hand.clone(), null, List.of(Ui.line("이 도구에 램프를 씁니다.", NamedTextColor.GRAY))));
-        holder.inventory.setItem(CURRENT, Ui.icon(current == null ? Material.PAPER : Material.ENCHANTED_BOOK, Ui.line(current == null ? "옵션 없음" : current.kind().label, current == null ? NamedTextColor.GRAY : NamedTextColor.YELLOW), current == null ? List.of() : List.of(Ui.line(current.describe(), NamedTextColor.GRAY))));
-        ItemStack stock = Ui.icon(Material.GLOWSTONE_DUST, Ui.line("보유 램프 " + profile.lamps() + "개", NamedTextColor.GOLD), List.of(Ui.line("적용할 때 1개를 씁니다.", NamedTextColor.GRAY)));
-        stock.setAmount((int) Math.clamp(profile.lamps(), 1L, 64L));
-        holder.inventory.setItem(STOCK, stock);
-        int slot = LIST_START;
+        if (tool == null) holder.inventory.setItem(MenuLayout.USE_TARGET, Ui.icon(Material.BARRIER, Ui.line("도구를 손에 들고 여세요", NamedTextColor.RED), List.of(Ui.line("괭이, 곡괭이, 삽, 도끼에 쓸 수 있습니다.", NamedTextColor.GRAY))));
+        else holder.inventory.setItem(MenuLayout.USE_TARGET, Ui.decorate(hand.clone(), null, List.of(Ui.line(current == null ? "현재 능력 없음" : "현재: " + current.describe(), NamedTextColor.YELLOW))));
+        List<Component> lore = new ArrayList<>();
+        if (holder.previous != null) lore.add(Ui.line("이전: " + holder.previous.describe(), NamedTextColor.GRAY));
+        if (current != null) lore.add(Ui.line("현재: " + current.describe(), NamedTextColor.YELLOW));
+        lore.add(Ui.line("램프 1개를 씁니다. 보유 " + money(profile.lamps()) + "개", NamedTextColor.GRAY));
+        lore.add(Ui.line(tool == null ? "손에 도구가 없어 쓸 수 없습니다." : profile.lamps() < 1 ? "램프가 없어 쓸 수 없습니다." : "기존 능력은 사라지고 무작위 능력이 붙습니다.", tool != null && profile.lamps() > 0 ? NamedTextColor.GRAY : NamedTextColor.RED));
+        Ui.button(holder.inventory, MenuLayout.USE_APPLY, drawn, Ui.icon(Material.LIME_CONCRETE, Ui.line("1회 적용", NamedTextColor.GREEN), lore));
+        Ui.button(holder.inventory, MenuLayout.USE_LIST, drawn, Ui.icon(Material.BOOK, Ui.line("가능한 능력 보기", NamedTextColor.YELLOW), List.of()));
+        Ui.button(holder.inventory, List.of(MenuLayout.USE_BACK), drawn, Ui.icon(Material.ARROW, Ui.line("뒤로", NamedTextColor.WHITE), List.of()));
+    }
+    private void renderOptions(Holder holder, Player player) {
+        LifeLamp.Tool tool = tool(player.getInventory().getItemInMainHand());
+        int slot = OPTIONS_START;
         for (LifeLamp.Kind kind : lamp.kinds(tool)) {
-            if (slot == LIST_START + LIST_SIZE) break;
+            if (slot == OPTIONS_START + OPTIONS_SIZE) break;
             holder.inventory.setItem(slot++, Ui.icon(icon(kind), Ui.line(kind.label, NamedTextColor.WHITE), List.of(Ui.line(lamp.range(kind), NamedTextColor.GRAY), Ui.line(kind.tool == null ? "모든 도구 공통" : kind.tool.label + " 전용", NamedTextColor.AQUA))));
         }
-        button(holder, drawn, BUY, Ui.icon(Material.GOLD_INGOT, Ui.line("램프 1개 구매", NamedTextColor.GOLD), List.of(
-            Ui.line(price + " 골드", NamedTextColor.YELLOW), Ui.line("보유 " + profile.coins() + " 골드", NamedTextColor.GRAY))));
-        button(holder, drawn, YES, Ui.icon(Material.LIME_CONCRETE, Ui.line("적용", NamedTextColor.GREEN), List.of(
-            Ui.line("능력은 이 도구가 받을 수 있는 것 중 무작위로 정해집니다.", NamedTextColor.GRAY),
-            Ui.line(current == null ? "도구 하나에 능력 하나가 붙습니다." : "기존 능력은 새 능력으로 바뀝니다.", current == null ? NamedTextColor.GRAY : NamedTextColor.RED))));
-        button(holder, drawn, NO, Ui.icon(Material.RED_CONCRETE, Ui.line("닫기", NamedTextColor.RED), List.of()));
+        holder.inventory.setItem(OPTIONS_BACK, Ui.icon(Material.ARROW, Ui.line("뒤로", NamedTextColor.WHITE), List.of()));
     }
-    private void buy(Player player, Holder holder) throws IOException {
+    private void buy(Player player, Holder holder, int amount) throws IOException {
         if (!plugin.survival(player)) return;
         if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
         var id = player.getUniqueId();
         Profile profile = store.load(id);
-        if (profile.coins() < price) { plugin.tell(player, "골드가 부족합니다. 필요 " + price + " / 보유 " + profile.coins()); return; }
-        plugin.transact(player, "lamp-buy", "-" + price, () -> store.save(id, profile.spend(price).addLamps(1)));
-        plugin.tell(player, "생활 램프를 구매했습니다. 보유 " + (profile.lamps() + 1) + "개");
+        long cost = Math.multiplyExact(price, amount);
+        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
+        plugin.transact(player, "lamp-buy", amount + " -" + cost, () -> store.save(id, profile.spend(cost).addLamps(amount)));
+        plugin.tell(player, "생활 램프 " + amount + "개를 구매했습니다. 보유 " + (profile.lamps() + amount) + "개");
         render(holder, player);
+        showLater(player, holder, null, 0);
     }
     private void apply(Player player, Holder holder) throws IOException {
-        if (holder.used) return;
-        holder.used = true;
+        if (holder.used || System.currentTimeMillis() < holder.readyAt) return;
         ItemStack hand = player.getInventory().getItemInMainHand();
         LifeLamp.Tool held = tool(hand);
         var id = player.getUniqueId();
         Profile profile = store.load(id);
         if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
-        if (player.getInventory().getHeldItemSlot() != holder.slot || held == null || profile.lamps() < 1) { plugin.tell(player, "도구나 램프가 바뀌어 적용하지 않았습니다."); return; }
-        LifeLamp.Option rolled = lamp.roll(held, ThreadLocalRandom.current());
+        if (player.getInventory().getHeldItemSlot() != holder.slot || held == null) { plugin.tell(player, "손에 든 도구가 없어 램프를 쓰지 않았습니다."); return; }
+        if (profile.lamps() < 1) { plugin.tell(player, "램프가 없어 쓰지 못했습니다. 램프는 그대로입니다."); return; }
+        holder.used = true;
+        LifeLamp.Option before = option(hand), rolled = lamp.roll(held, ThreadLocalRandom.current());
         plugin.transact(player, "lamp", rolled.encode(), () -> {
             store.save(id, profile.useLamp());
             write(hand, rolled);
         });
         plugin.tell(player, "생활 램프를 적용했습니다. " + rolled.describe());
+        // The result stays on the same screen; trying again takes a separate click on the refreshed window.
+        render(holder, player);
+        showLater(player, holder, before, System.currentTimeMillis() + RETRY_MILLIS);
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
         event.setCancelled(true);
-        if (!(event.getWhoClicked() instanceof Player player) || event.getClick() != ClickType.LEFT) return;
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        ClickType click = event.getClick();
         int slot = event.getRawSlot();
-        if (BUY.contains(slot)) { plugin.guarded(player, () -> buy(player, holder)); return; }
-        if (YES.contains(slot)) plugin.guarded(player, () -> apply(player, holder));
-        else if (!NO.contains(slot)) return;
-        plugin.getServer().getScheduler().runTask(plugin, () -> player.closeInventory());
+        if (holder.screen == Screen.SHOP && MenuLayout.SHOP_BUY.contains(slot) && (click == ClickType.LEFT || click == ClickType.SHIFT_LEFT)) {
+            plugin.guarded(player, () -> buy(player, holder, click == ClickType.LEFT ? 1 : BULK));
+            return;
+        }
+        if (click != ClickType.LEFT) return;
+        switch (holder.screen) {
+            case SHOP -> {
+                if (MenuLayout.SHOP_USE.contains(slot)) showNext(player, Screen.USE);
+                else if (slot == MenuLayout.SHOP_CLOSE) plugin.getServer().getScheduler().runTask(plugin, () -> player.closeInventory());
+            }
+            case USE -> {
+                if (MenuLayout.USE_APPLY.contains(slot)) plugin.guarded(player, () -> apply(player, holder));
+                else if (MenuLayout.USE_LIST.contains(slot)) showNext(player, Screen.OPTIONS);
+                else if (slot == MenuLayout.USE_BACK) showNext(player, Screen.SHOP);
+            }
+            case OPTIONS -> {
+                if (slot == OPTIONS_BACK) showNext(player, Screen.USE);
+            }
+        }
     }
     @EventHandler
     public void onDrag(InventoryDragEvent event) {

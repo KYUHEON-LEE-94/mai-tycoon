@@ -34,6 +34,18 @@ final class Ui {
         icon.setItemMeta(meta);
         return icon;
     }
+    /** Keeps the tooltip and clicks but draws nothing, so a button painted on the background shows through. */
+    static ItemStack blank(ItemStack icon) {
+        var meta = icon.getItemMeta();
+        meta.setItemModel(new org.bukkit.NamespacedKey("maitycoon", "blank"));
+        icon.setItemMeta(meta);
+        return icon;
+    }
+    /** Every slot of a wide button: painted with the pack, filled with the icon without it. */
+    static void button(Inventory inventory, List<Integer> slots, boolean drawn, ItemStack icon) {
+        ItemStack face = drawn ? blank(icon.clone()) : icon;
+        for (int slot : slots) inventory.setItem(slot, face);
+    }
     static Component line(String text, NamedTextColor color) {
         return Component.text(text, color).decoration(TextDecoration.ITALIC, false);
     }
