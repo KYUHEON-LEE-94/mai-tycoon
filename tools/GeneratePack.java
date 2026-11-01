@@ -35,6 +35,7 @@ public class GeneratePack {
         backgroundTiles("lampuse", lampUse());
         backgroundTiles("land", landMap());
         backgroundTiles("landbuy", landConfirm());
+        backgroundTiles("farm", farmManagement());
         backgroundTiles("furniture", background("가구 상점", List.of("전체", "침대", "조명", "수납", "장식"), GOLD));
         backgroundTiles("build", background("건축 자재 상점", List.of("전체", "목재", "석재", "장식", "색상"), GOLD));
         png("assets/maitycoon/textures/gui/tab.png", tabHighlight());
@@ -391,23 +392,61 @@ public class GeneratePack {
         button(g, x, 108, w, 18, fill);
         if (text != null) centered(g, text, font(6, true), ink, x + w / 2.0, 117);
     }
+    /** A single product card: art and details above one full-width purchase target. */
     static BufferedImage lampShop() {
         var image = canvas();
         Graphics2D g = screen(image, "램프 상점");
-        card(g, 7, 17, 162, 57);
-        box(g, new Color(0x2A2725), 8, 36, 16, 16, 0);
-        outline(g, LINE_GOLD, 7, 35, 18, 18, 0);
-        left(g, "생활 도구 전용 램프", font(7, true), BODY, 28, 28);
-        left(g, "생활 도구에 무작위 능력을 부여합니다", font(5, false), MUTED, 28, 40);
-        left(g, "보유", font(5, false), MUTED, 8, 62);
-        button(g, 43, 54, 90, 18, BUY_BLUE);
-        left(g, "구매 ·", font(6, true), new Color(0x142530), 50, 63);
+        card(g, 7, 18, 162, 72);
+        left(g, "생활 도구 전용 램프", font(7, true), BODY, 13, 27);
+        // Close stays in its own slot; it never covers the product title or price.
+        button(g, 154, 20, 13, 13, CARD);
+        centered(g, "×", font(8, false), MUTED, 160.5, 26.5);
+        box(g, new Color(0x242322), 12, 37, 32, 30, 0);
+        outline(g, EDGE, 12, 37, 32, 30, 0);
+        lampArtwork(g, 15, 39);
+        left(g, "도구에 특별한 능력을", font(6, false), BODY, 50, 42);
+        left(g, "무작위로 부여합니다", font(6, false), BODY, 50, 51);
+        left(g, "보유", font(5, false), MUTED, 50, 63);
+        int buyX = MenuLayout.slotX(MenuLayout.SHOP_BUY.get(0)) - 1;
+        button(g, buyX, 72, MenuLayout.SHOP_BUY.size() * MenuLayout.COLUMN - 1, 18, BUY_BLUE);
+        left(g, "구매", font(7, true), new Color(0x142530), 18, 82);
+        left(g, "좌클릭 1개 · Shift + 좌클릭 64개", font(5, false), MUTED, 13, 99);
+        g.setColor(EDGE);
+        g.fillRect(7 * SCALE, 106 * SCALE, 162 * SCALE, SCALE / 2);
         left(g, "잔액", font(5, false), MUTED, 8, 118);
-        centered(g, "닫기", font(5, true), BODY, 161, 27);
-        outline(g, EDGE, 153, 19, 16, 16, 0);
-        wide(g, MenuLayout.SHOP_USE, new Color(0x3F6C42), "램프 사용", CREAM);
+        wide(g, MenuLayout.SHOP_USE, new Color(0x3A332E), "램프 사용 ›", LINE_GOLD);
         g.dispose();
         return image;
+    }
+    /** Code-drawn brass lamp with a turquoise jewel; no borrowed artwork or vanilla dust icon. */
+    static void lampArtwork(Graphics2D g, int x, int y) {
+        var art = (Graphics2D) g.create();
+        art.translate(x * SCALE, y * SCALE);
+        art.scale(SCALE, SCALE);
+        art.setColor(new Color(0x181716));
+        art.fillOval(2, 22, 25, 3);
+        art.setColor(new Color(0x9B6D32));
+        art.setStroke(new BasicStroke(2));
+        art.drawOval(1, 9, 8, 9);
+        int[] xs = {6, 9, 21, 27, 24, 20, 18, 10};
+        int[] ys = {10, 8, 9, 5, 13, 16, 19, 18};
+        art.fillPolygon(xs, ys, xs.length);
+        art.setColor(new Color(0xE5BD65));
+        art.fillOval(6, 8, 16, 10);
+        art.fillRect(11, 18, 7, 3);
+        art.fillRoundRect(8, 21, 13, 2, 1, 1);
+        art.setColor(new Color(0xFFF0B0));
+        art.fillRect(9, 8, 10, 2);
+        art.fillRect(12, 5, 5, 3);
+        art.fillRect(14, 3, 1, 2);
+        art.setColor(new Color(0x216F70));
+        art.fillOval(11, 11, 7, 7);
+        art.setColor(new Color(0x8DE6CF));
+        art.fillPolygon(new int[]{14, 16, 14, 12}, new int[]{11, 14, 17, 14}, 4);
+        art.setColor(new Color(0xFFF0B0));
+        art.fillRect(24, 0, 1, 5);
+        art.fillRect(22, 2, 5, 1);
+        art.dispose();
     }
     static BufferedImage lampUse() {
         var image = canvas();
@@ -430,6 +469,25 @@ public class GeneratePack {
         g.dispose();
         return image;
     }
+    static BufferedImage farmManagement() {
+        var image = canvas();
+        Graphics2D g = screen(image, "토지 관리");
+        left(g, "내 땅", font(5, false), MUTED, 124, 8);
+        // These summary cards share the same slot regions as their hover details.
+        card(g, 7, 18, 72, 18);
+        card(g, 97, 18, 72, 18);
+        centered(g, "작업자 · 권한 안내", font(6, true), BODY, 43, 27);
+        centered(g, "내 땅 · 좌표 목록", font(6, true), BODY, 133, 27);
+        box(g, new Color(0x252221), 7, 37, 162, 70, 0);
+        outline(g, EDGE, 7, 37, 162, 70, 0);
+        // No decorative items in the record area: only actual footprints appear here.
+        left(g, "서리 기록은 우클릭으로 신고할 수 있습니다", font(4, false), MUTED, 8, 134);
+        wide(g, MenuLayout.FARM_BACK, new Color(0x3A332E), "‹ 토지 지도", BODY);
+        wide(g, MenuLayout.FARM_STATUS, new Color(0x3F5143), "작물 현황", BODY);
+        wide(g, MenuLayout.FARM_AUTO, new Color(0x3A4850), "자동 심기", BODY);
+        g.dispose();
+        return image;
+    }
     static BufferedImage landMap() {
         var image = canvas();
         Graphics2D g = screen(image, "토지");
@@ -438,15 +496,13 @@ public class GeneratePack {
             box(g, new Color(0x2A2725), 8 + col * 18, 18 + row * 18, 16, 16, 0);
         }
         card(g, 99, 17, 70, 88);
-        left(g, "선택한 땅", font(6, true), LINE_GOLD, 103, 23);
-        String[] rows = {"청크", "상태", "가격", "구매 후", "이용권"};
-        for (int i = 0; i < rows.length; i++) left(g, rows[i], font(5, false), MUTED, 103, 34 + i * 10);
-        String[][] legend = {{"내 땅", "42A65A"}, {"타인", "D96666"}, {"마을", "E8C84A"}, {"빈 땅", "BDB2A3"}};
-        for (int i = 0; i < legend.length; i++) {
-            int x = 103 + i % 2 * 33, y = 84 + i / 2 * 10;
-            box(g, new Color(Integer.parseInt(legend[i][1], 16)), x, y, 5, 5, 0);
-            left(g, legend[i][0], font(5, false), BODY, x + 7, y + 2.5);
-        }
+        left(g, "선택한 청크", font(5, true), MUTED, 103, 23);
+        left(g, "구매 가격 · 골드", font(5, false), MUTED, 103, 53);
+        left(g, "구매 후 잔액", font(5, false), MUTED, 103, 73);
+        left(g, "이용권", font(5, false), MUTED, 103, 98);
+        g.setColor(EDGE);
+        g.fillRect(103 * SCALE, 48 * SCALE, 62 * SCALE, SCALE / 2);
+        g.fillRect(103 * SCALE, 91 * SCALE, 62 * SCALE, SCALE / 2);
         wide(g, MenuLayout.LAND_BORDER, new Color(0x3A332E), "경계 확인", CREAM);
         wide(g, MenuLayout.LAND_HOME, new Color(0x3A332E), "내 위치", CREAM);
         wide(g, MenuLayout.LAND_FARM, new Color(0x3A332E), "농장 관리", CREAM);
@@ -608,8 +664,8 @@ public class GeneratePack {
     static String bitmap(String file, int height, int ascent, String chars) {
         return "{\"type\":\"bitmap\",\"file\":\"maitycoon:gui/" + file + "\",\"height\":" + height + ",\"ascent\":" + ascent + ",\"chars\":[\"" + chars + "\"]}";
     }
-    static final List<String> KINDS = List.of("sell", "buy", "build", "panel", "furniture", "lamp", "lampuse", "land", "landbuy");
-    static final List<Integer> BASES = List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900, 0xE500, 0xE700, 0xEA00, 0xEB00);
+    static final List<String> KINDS = List.of("sell", "buy", "build", "panel", "furniture", "lamp", "lampuse", "land", "landbuy", "farm");
+    static final List<Integer> BASES = List.of(0xE300, 0xE400, 0xE600, 0xE800, 0xE900, 0xE500, 0xE700, 0xEA00, 0xEB00, 0xEC00);
     static String guiFont() {
         var providers = new StringJoiner(",");
         for (int kind = 0; kind < KINDS.size(); kind++) for (int row = 0; row < TILE_ROWS; row++) for (int col = 0; col < 4; col++) {

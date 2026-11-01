@@ -204,12 +204,12 @@ final class Lands implements Listener {
         Status status = status(player, holder.chosenX, holder.chosenZ);
         var title = new ShopTitle().screen(0xEA00).value(7, 144, owned + "/" + max);
         title.selected(holder.chosenX - holder.centerX + MenuLayout.MAP_COLUMNS / 2, holder.chosenZ - holder.centerZ + MenuLayout.MAP_ROWS / 2);
-        title.value(32, 122, holder.chosenX + "," + holder.chosenZ).label(42, 122, label(status));
+        title.value(32, 103, holder.chosenX + "," + holder.chosenZ).label(42, 103, label(status));
         if (status == Status.FREE) {
-            title.value(52, 122, money(next));
-            if (profile.coins() < next) title.label(62, 122, "골드 부족");
-            else title.value(62, 122, money(profile.coins() - next));
-            title.label(72, 122, permitted(player, profile) ? "보유" : "필요");
+            title.value(62, 103, money(next));
+            if (profile.coins() < next) title.label(82, 103, "골드 부족");
+            else title.value(82, 103, money(profile.coins() - next));
+            title.label(97, 130, permitted(player, profile) ? "보유" : "필요");
         }
         if (!purchasable(player, profile, holder.chosenX, holder.chosenZ)) title.dimmed(MenuLayout.slotX(MenuLayout.LAND_CONFIRM.get(0)) - 1, false);
         return title.build();

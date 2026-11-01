@@ -21,7 +21,7 @@ final class FarmMenu implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int BODY_START = 9, BODY_SIZE = 36, BACK = 45, STATUS = 47, WORKERS = 49, AUTO_PLANT = 51, PARCELS = 53;
+    private static final int BODY_START = 9, BODY_SIZE = 36;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
     private final MaiTycoonPlugin plugin;
     private final Lands lands;
@@ -31,12 +31,19 @@ final class FarmMenu implements Listener {
     }
     void open(Player player) {
         Holder holder = new Holder();
-        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, plugin.menuTitle(player, "농장 관리"));
+        Component title = plugin.menuTitle(player, "토지 관리");
+        if (plugin.packDrawn(player)) {
+            var panel = new ShopTitle().screen(0xEC00).value(7, 143, Integer.toString(lands.parcelNames(player).size())).label(7, -1, "개");
+            if (lands.reportable(player).isEmpty()) panel.label(67, 55, "신고할 기록 없음");
+            title = panel.build();
+        }
+        holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, title);
         render(holder, player);
         player.openInventory(holder.inventory);
     }
     private void render(Holder holder, Player player) {
         Inventory inventory = holder.inventory;
+        boolean drawn = plugin.packDrawn(player);
         plugin.frame(inventory, player);
         holder.footprints.clear();
         List<FootprintLog.Footprint> open = lands.reportable(player);
@@ -53,14 +60,14 @@ final class FarmMenu implements Listener {
         for (String name : lands.workerNames(player)) names.add(Ui.line(name, NamedTextColor.GRAY));
         names.add(Ui.line("/tycoon land member add <이름> 으로 추가합니다.", NamedTextColor.DARK_GRAY));
         names.add(Ui.line("작업자는 수확, 파종, 경작만 할 수 있습니다.", NamedTextColor.DARK_GRAY));
-        inventory.setItem(WORKERS, Ui.icon(Material.PLAYER_HEAD, Ui.line("작업자 " + (names.size() - 2) + "명", NamedTextColor.GREEN), names));
-        inventory.setItem(STATUS, Ui.icon(Material.WHEAT, Ui.line("작물 현황", NamedTextColor.YELLOW), List.of(Ui.line("내 땅의 특산 작물과 수확 시각을 봅니다.", NamedTextColor.GRAY))));
-        inventory.setItem(AUTO_PLANT, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기", NamedTextColor.YELLOW), List.of(Ui.line("켜고 끄거나 횟수를 삽니다.", NamedTextColor.GRAY))));
+        Ui.button(inventory, MenuLayout.FARM_WORKERS, drawn, Ui.icon(Material.PLAYER_HEAD, Ui.line("작업자 " + (names.size() - 2) + "명", NamedTextColor.GREEN), names));
+        Ui.button(inventory, MenuLayout.FARM_STATUS, drawn, Ui.icon(Material.WHEAT, Ui.line("작물 현황", NamedTextColor.YELLOW), List.of(Ui.line("내 땅의 특산 작물과 수확 시각을 봅니다.", NamedTextColor.GRAY))));
+        Ui.button(inventory, MenuLayout.FARM_AUTO, drawn, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기", NamedTextColor.YELLOW), List.of(Ui.line("켜고 끄거나 횟수를 삽니다.", NamedTextColor.GRAY))));
         List<String> parcels = lands.parcelNames(player);
         List<Component> lines = new ArrayList<>();
         for (String parcel : parcels) lines.add(Ui.line(parcel, NamedTextColor.GRAY));
-        inventory.setItem(PARCELS, Ui.icon(Material.GRASS_BLOCK, Ui.line("내 땅 " + parcels.size() + "개", NamedTextColor.GREEN), lines));
-        inventory.setItem(BACK, Ui.icon(Material.ARROW, Ui.line("토지로", NamedTextColor.WHITE), List.of()));
+        Ui.button(inventory, MenuLayout.FARM_PARCELS, drawn, Ui.icon(Material.GRASS_BLOCK, Ui.line("내 땅 " + parcels.size() + "개", NamedTextColor.GREEN), lines));
+        Ui.button(inventory, MenuLayout.FARM_BACK, drawn, Ui.icon(Material.ARROW, Ui.line("토지로", NamedTextColor.WHITE), List.of()));
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
@@ -68,12 +75,12 @@ final class FarmMenu implements Listener {
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
         int slot = event.getRawSlot();
-        if (slot == BACK) { plugin.getServer().getScheduler().runTask(plugin, () -> lands.open(player)); return; }
-        if (slot == STATUS) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openFarmStatus(player)); return; }
-        if (slot == AUTO_PLANT) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> plugin.openAutoPlant(player))); return; }
+        if (MenuLayout.FARM_BACK.contains(slot)) { plugin.getServer().getScheduler().runTask(plugin, () -> lands.open(player)); return; }
+        if (MenuLayout.FARM_STATUS.contains(slot)) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openFarmStatus(player)); return; }
+        if (MenuLayout.FARM_AUTO.contains(slot)) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> plugin.openAutoPlant(player))); return; }
         String id = holder.footprints.get(slot);
         if (id == null || event.getClick() != ClickType.RIGHT) return;
-        plugin.guarded(player, () -> { lands.report(player, id); render(holder, player); });
+        plugin.guarded(player, () -> { lands.report(player, id); plugin.getServer().getScheduler().runTask(plugin, () -> { if (player.getOpenInventory().getTopInventory().getHolder() == holder) open(player); }); });
     }
     @EventHandler
     public void onDrag(InventoryDragEvent event) {

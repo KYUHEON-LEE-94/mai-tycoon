@@ -102,10 +102,10 @@ final class Lamps implements Listener {
     private static String money(long value) { return String.format("%,d", value); }
     private Component shopTitle(Profile profile) {
         return new ShopTitle().screen(0xE500)
-            .value(62, 18, money(profile.lamps())).label(62, -1, "개")
-            .onBlue(true).value(62, 76, money(price)).label(62, -1, "골드").onBlue(false)
+            .value(62, 70, money(profile.lamps())).label(62, -1, "개")
+            .onBlue(true).value(82, 70, money(price)).label(82, -1, "골드").onBlue(false)
             .value(117, 24, money(profile.coins())).label(117, -1, "골드")
-            .value(117, 82, "1/1").build();
+            .build();
     }
     private void describe(ShopTitle title, int y, LifeLamp.Option option) {
         title.label(y, 44, "KIND_" + option.kind());
@@ -155,7 +155,7 @@ final class Lamps implements Listener {
     }
     private void renderShop(Holder holder, Player player, Profile profile) {
         boolean drawn = plugin.packDrawn(player);
-        holder.inventory.setItem(MenuLayout.SHOP_ICON, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 도구 전용 램프", NamedTextColor.GOLD), List.of(
+        Ui.button(holder.inventory, List.of(MenuLayout.SHOP_ICON), drawn, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 도구 전용 램프", NamedTextColor.GOLD), List.of(
             Ui.line("보유 " + money(profile.lamps()) + "개", NamedTextColor.GRAY), Ui.line("괭이, 곡괭이, 삽, 도끼에 무작위 능력을 붙입니다.", NamedTextColor.GRAY))));
         Ui.button(holder.inventory, MenuLayout.SHOP_BUY, drawn, Ui.icon(Material.GOLD_INGOT, Ui.line("구매 · " + money(price) + " 골드", NamedTextColor.AQUA), List.of(
             Ui.line("좌클릭 시 1개 구매", NamedTextColor.GRAY),
