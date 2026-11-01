@@ -89,7 +89,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             if (landPrice < 1 || landStep < 0 || landMax < 1) throw new IOException("Invalid land settings");
             long reportDays = getConfig().getLong("land.report-days");
             if (reportDays < 1) throw new IOException("Invalid land settings");
-            lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L);
+            lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L, getConfig().getBoolean("land.theft"));
             npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
             npcActions.put("guide", player -> helpMenu.open(player));
             npcActions.put("lamp", player -> guarded(player, () -> lamps.open(player)));

@@ -27,7 +27,7 @@ class ShopLayoutTest {
             List.of(List.of(MenuLayout.USE_TARGET), List.of(MenuLayout.USE_BACK), MenuLayout.USE_LIST, MenuLayout.USE_APPLY),
             List.of(MenuLayout.LAND_BORDER, MenuLayout.LAND_HOME, MenuLayout.LAND_FARM, MenuLayout.LAND_CONFIRM),
             List.of(MenuLayout.FARM_WORKERS, MenuLayout.FARM_PARCELS, MenuLayout.FARM_BACK, MenuLayout.FARM_STATUS, MenuLayout.FARM_AUTO),
-            List.of(MenuLayout.BUY_YES, MenuLayout.BUY_NO))) {
+            List.of(MenuLayout.BUY_YES, MenuLayout.BUY_PERMIT, MenuLayout.BUY_NO))) {
             Set<Integer> used = new HashSet<>();
             for (List<Integer> button : screen) for (int slot : button) assertTrue(slot >= 0 && slot < MenuLayout.SIZE && used.add(slot), "Slot " + slot);
         }

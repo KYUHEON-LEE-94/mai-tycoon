@@ -7,11 +7,30 @@ import static org.junit.jupiter.api.Assertions.*;
 class LandRulesTest {
     private final UUID owner = UUID.randomUUID(), worker = UUID.randomUUID(), visitor = UUID.randomUUID();
     private static final String HOME = LandRegistry.key("w", -1, -1), NEXT = LandRegistry.key("w", 0, -1), WILD = LandRegistry.key("w", 5, 5);
-    private LandRegistry lands() {
-        var lands = new LandRegistry();
+    private LandRegistry lands() { return lands(true); }
+    private LandRegistry lands(boolean theft) {
+        var lands = new LandRegistry(theft);
         lands.put(HOME, owner);
         lands.addWorker(owner, worker);
         return lands;
+    }
+    @Test void withoutTheftOnlyChosenPeopleHarvest() {
+        var lands = lands(false);
+        assertFalse(lands.allows(HOME, visitor, Action.HARVEST));
+        assertFalse(lands.isTheft(HOME, visitor));
+        assertTrue(lands.allows(HOME, worker, Action.HARVEST));
+    }
+    @Test void ownerChoosesEachWorkersRights() {
+        var lands = lands(false);
+        assertEquals(LandRegistry.WORKER_ACTIONS, lands.rights(owner, worker));
+        assertTrue(lands.toggle(owner, worker, Action.BUILD));
+        assertTrue(lands.allows(HOME, worker, Action.BUILD));
+        assertFalse(lands.toggle(owner, worker, Action.HARVEST));
+        assertFalse(lands.allows(HOME, worker, Action.HARVEST));
+        assertThrows(IllegalArgumentException.class, () -> lands.toggle(owner, visitor, Action.BUILD));
+        assertTrue(lands.removeWorker(owner, worker));
+        assertFalse(lands.employers().contains(owner));
+        assertFalse(lands.allows(HOME, worker, Action.BUILD));
     }
     @Test void rolesFollowThePermissionTable() {
         var lands = lands();

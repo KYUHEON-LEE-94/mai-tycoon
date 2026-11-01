@@ -22,7 +22,7 @@ public final class MenuLayout {
     public static final List<Integer> FARM_WORKERS = List.of(0, 1, 2, 3), FARM_PARCELS = List.of(5, 6, 7, 8);
     public static final List<Integer> FARM_BACK = List.of(45, 46, 47), FARM_STATUS = List.of(48, 49, 50), FARM_AUTO = List.of(51, 52, 53);
     public static final int BUY_SUMMARY = 13;
-    public static final List<Integer> BUY_YES = List.of(45, 46, 47, 48), BUY_NO = List.of(50, 51, 52, 53);
+    public static final List<Integer> BUY_YES = List.of(45, 46, 47), BUY_PERMIT = List.of(48, 49, 50), BUY_NO = List.of(51, 52, 53);
 
     public static final List<String> LABEL_IDS, LABEL_TEXTS;
     static {
@@ -36,7 +36,7 @@ public final class MenuLayout {
             ids.add("KIND_" + kind.name());
             texts.add(kind.label);
         }
-        String[] words = {"없음", "도구 없음", "구매 가능", "내 땅", "타인 소유", "마을 구역", "보유", "필요", "소모 없음", "구매 확정", "돌아가기", "경계 보기", "농장 관리", "구매 완료", "골드", "개", "골드 부족", "한도 초과", "신고할 기록 없음"};
+        String[] words = {"없음", "도구 없음", "구매 가능", "내 땅", "타인 소유", "마을 구역", "보유", "필요", "소모 없음", "골드로 구매", "이용권 구매", "돌아가기", "경계 보기", "농장 관리", "구매 완료", "골드", "개", "골드 부족", "한도 초과", "지정한 작업자 없음"};
         for (String word : words) {
             ids.add(word);
             texts.add(word);

@@ -61,7 +61,7 @@ class DexLandTest {
         assertEquals(Set.of("WHEAT"), profile.dex());
     }
     @Test void landLimitAndOwnership() {
-        var lands = new LandRegistry();
+        var lands = new LandRegistry(true);
         UUID alice = UUID.randomUUID(), bob = UUID.randomUUID();
         String a = LandRegistry.key("world", 0, 0), b = LandRegistry.key("world", 1, 0);
         assertEquals(LandRegistry.Claim.OK, lands.check(a, alice, 1));

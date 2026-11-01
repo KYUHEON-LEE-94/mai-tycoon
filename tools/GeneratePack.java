@@ -476,12 +476,12 @@ public class GeneratePack {
         // These summary cards share the same slot regions as their hover details.
         card(g, 7, 18, 72, 18);
         card(g, 97, 18, 72, 18);
-        centered(g, "작업자 · 권한 안내", font(6, true), BODY, 43, 27);
+        centered(g, "작업자 추가", font(6, true), BODY, 43, 27);
         centered(g, "내 땅 · 좌표 목록", font(6, true), BODY, 133, 27);
         box(g, new Color(0x252221), 7, 37, 162, 70, 0);
         outline(g, EDGE, 7, 37, 162, 70, 0);
-        // No decorative items in the record area: only actual footprints appear here.
-        left(g, "서리 기록은 우클릭으로 신고할 수 있습니다", font(4, false), MUTED, 8, 134);
+        // No decorative items in the list area: only actual workers appear here.
+        left(g, "작업자를 누르면 권한을 바꿀 수 있습니다", font(4, false), MUTED, 8, 134);
         wide(g, MenuLayout.FARM_BACK, new Color(0x3A332E), "‹ 토지 지도", BODY);
         wide(g, MenuLayout.FARM_STATUS, new Color(0x3F5143), "작물 현황", BODY);
         wide(g, MenuLayout.FARM_AUTO, new Color(0x3A4850), "자동 심기", BODY);
@@ -517,6 +517,7 @@ public class GeneratePack {
         String[] rows = {"청크", "블록 X", "블록 Z", "가격", "현재 잔액", "구매 후 잔액", "구매 후 보유", "이용권"};
         for (int i = 0; i < rows.length; i++) left(g, rows[i], font(5, false), MUTED, 12, 25 + i * 10);
         wide(g, MenuLayout.BUY_YES, BUY_BLUE, null, CREAM);
+        wide(g, MenuLayout.BUY_PERMIT, new Color(0x3F5143), null, CREAM);
         wide(g, MenuLayout.BUY_NO, new Color(0x3A332E), null, CREAM);
         g.dispose();
         return image;
