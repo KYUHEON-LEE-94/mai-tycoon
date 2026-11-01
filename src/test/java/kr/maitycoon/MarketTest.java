@@ -38,6 +38,16 @@ class MarketTest {
         market.restore("UNKNOWN", 100, 100);
         assertFalse(market.has("UNKNOWN"));
     }
+    @Test void reportsSalesLeftUntilTheNextPressureStep() {
+        Market m = market();
+        assertEquals(256, m.untilNextPressure("WHEAT"));
+        m.recordSales(Map.of("WHEAT", 250L));
+        assertEquals(6, m.untilNextPressure("WHEAT"));
+        m.recordSales(Map.of("WHEAT", 6L));
+        assertEquals(256, m.untilNextPressure("WHEAT"));
+        m.recordSales(Map.of("WHEAT", 256L * 10));
+        assertEquals(0, m.untilNextPressure("WHEAT"));
+    }
     @Test void trailKeepsRecentPricesInOrder() {
         Market market = market();
         var random = new Random(3);

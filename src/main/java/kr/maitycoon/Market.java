@@ -72,6 +72,8 @@ public final class Market {
         long batches = sold(id) / volumeThreshold;
         return (int) Math.min(maxPressure, Math.min(batches, maxPressure) * pressurePerBatch);
     }
+    /** Further sales needed to raise the pressure, or 0 once it is at the maximum. */
+    public long untilNextPressure(String id) { return pendingPressure(id) >= maxPressure ? 0 : volumeThreshold - sold(id) % volumeThreshold; }
     public void recordSales(Map<String, Long> counts) {
         for (var entry : counts.entrySet()) {
             if (!has(entry.getKey()) || entry.getValue() == null || entry.getValue() < 0)

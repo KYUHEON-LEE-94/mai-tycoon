@@ -29,13 +29,16 @@ final class Village implements Listener {
     /** skin is a vanilla default skin path the resource pack repaints, so players without the pack still see a normal person. */
     private record Npc(String id, int dx, int dz, float yaw, String name, String skin) {}
     private static final List<Npc> NPCS = List.of(
-        new Npc("market", VillageBuilder.MARKET_STALL_X, VillageBuilder.NPC_Z, 0f, "작물 상인", "kai"),
-        new Npc("seeds", VillageBuilder.SEED_STALL_X, VillageBuilder.NPC_Z, 0f, "씨앗 상인", "makena"),
+        new Npc("market", -2, VillageBuilder.NPC_Z, 0f, "작물 상인", "kai"),
+        new Npc("seeds", 2, VillageBuilder.NPC_Z, 0f, "씨앗 상인", "makena"),
+        new Npc("lamp", 0, VillageBuilder.NPC_Z - 1, 0f, "램프 상인", "steve"),
         new Npc("building", -9, 7, -90f, "건축 자재 상인", "noor"),
         new Npc("furniture", 9, 7, 90f, "가구 상인", "sunny"),
         new Npc("guide", 3, VillageBuilder.SPAWN_DZ + 2, 180f, "안내원", "ari"),
         new Npc("dex", -VillageBuilder.PLAZA_NPC_X, 0, -90f, "도감 사서", "efe"),
         new Npc("land", VillageBuilder.PLAZA_NPC_X, 0, 90f, "토지 관리인", "zuri"));
+    /** Where NPCs stood in older versions. Their entities stay in those chunks until removed. */
+    private static final List<int[]> OLD_SPOTS = List.of(new int[]{-7, -15}, new int[]{7, -15});
     private record Sign(int dx, double dy, double dz, String text) {}
     private static final List<Sign> SIGNS = List.of(
         new Sign(VillageBuilder.MARKET_STALL_X, 7.6, VillageBuilder.STALL_FRONT + 1.6, "농산물 상점"),
@@ -202,6 +205,13 @@ final class Village implements Listener {
         World world = world();
         if (world == null) return;
         showSigns(world);
+        Set<String> ids = new HashSet<>();
+        for (Npc npc : NPCS) ids.add(npc.id());
+        for (int[] spot : OLD_SPOTS) {
+            for (Entity entity : new Location(world, x + spot[0], y + 1, z + spot[1]).getChunk().getEntities()) {
+                if (ids.contains(entity.getPersistentDataContainer().get(npcKey, PersistentDataType.STRING))) entity.remove();
+            }
+        }
         for (Npc npc : NPCS) {
             Location at = new Location(world, x + npc.dx() + 0.5, y + 1, z + npc.dz() + 0.5, npc.yaw(), 0f);
             for (Entity entity : at.getChunk().getEntities()) {

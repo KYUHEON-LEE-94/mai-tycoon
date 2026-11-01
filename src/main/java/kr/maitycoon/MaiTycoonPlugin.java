@@ -20,6 +20,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private ProfileStore store;
     private Market market;
+    private MarketStats stats;
+    private MarketMenu marketMenu;
+    private boolean adminSalesMovePrice;
     private Shop shop;
     private Village village;
     private DexMenu dexMenu;
@@ -35,7 +38,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private TransactionJournal journal;
     private long marketInterval, nextMarketChange;
     private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "village", "dex", "land", "lamp", "autoplant");
-    private static final String CUSTOM_CATEGORY = "특산물";
+    private static final String CUSTOM_CATEGORY = "특산물", ROUND_KEY = "stats-round";
+    private static final int REPORT_ROUNDS = 144, REPORT_ITEMS = 10;
     private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
     static final String BUY_PROMPT = "[손 바꾸기]";
     private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
@@ -55,10 +59,17 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             retireOldSettings();
             catalog = new Catalog(this, getConfig().getConfigurationSection("custom-crops.crops"));
             market = loadMarket();
+            int intervalMinutes = getConfig().getInt("market.interval-minutes"), keepDays = getConfig().getInt("market.stats-keep-days");
+            if (keepDays < 1) throw new IOException("Invalid stats retention");
+            stats = new MarketStats(getDataFolder().toPath().resolve("stats"), Math.max(1, keepDays * 1440 / Math.max(1, intervalMinutes)), System.currentTimeMillis());
+            adminSalesMovePrice = getConfig().getBoolean("market.admin-sales-move-price");
             restoreMarket();
+            for (var entry : journal.interrupted()) {
+                if (entry.type().equals("sell")) getLogger().warning("Interrupted sale " + entry.id() + (stats.counted(entry.id()) ? " is counted in the open stats round" : " is not counted in the open stats round"));
+            }
             Map<String, String> crops = loadCrops();
             Map<String, Shop.Listing> seeds = loadSeeds();
-            marketInterval = getConfig().getInt("market.interval-minutes") * 60_000L;
+            marketInterval = intervalMinutes * 60_000L;
             if (marketInterval < 60_000) throw new IOException("Invalid market interval");
             shop = new Shop(this, market, store, catalog, crops, seeds, loadShelf("building-shop"), loadShelf("furniture-shop"));
             dexMenu = new DexMenu(this, loadDex(), store, catalog);
@@ -74,6 +85,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L);
             npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
             npcActions.put("guide", player -> helpMenu.open(player));
+            npcActions.put("lamp", player -> guarded(player, () -> lamps.open(player)));
             npcActions.put("building", player -> shop.open(player, Shop.Kind.BUILD));
             npcActions.put("furniture", player -> shop.open(player, Shop.Kind.FURNITURE));
             npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
@@ -95,8 +107,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             customCrops = new CustomCrops(this, catalog, village, lands, cropLimit, getConfig().getBoolean("custom-crops.bone-meal"));
             getServer().getPluginManager().registerEvents(customCrops, this);
             village.onShowcase(customCrops::plantShowcase);
-            lamps = new Lamps(this, store, loadLamp());
+            long lampPrice = getConfig().getLong("lamp-shop.price");
+            if (lampPrice < 1) throw new IOException("Invalid lamp price");
+            lamps = new Lamps(this, store, loadLamp(), lampPrice);
             getServer().getPluginManager().registerEvents(lamps, this);
+            marketMenu = new MarketMenu(this, market, catalog);
+            getServer().getPluginManager().registerEvents(marketMenu, this);
             helpMenu = new HelpMenu(this);
             getServer().getPluginManager().registerEvents(helpMenu, this);
             miniMap = new MiniMap(this);
@@ -275,6 +291,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             market.restoreTrail(id, yaml.getIntegerList(id + ".trail"));
             market.restoreSupply(id, yaml.getLong(id + ".sold", 0), yaml.getInt(id + ".pressure", 0));
         }
+        if (yaml.isConfigurationSection(ROUND_KEY)) stats.restore(yaml.getConfigurationSection(ROUND_KEY));
     }
     private void saveMarket() throws IOException {
         var yaml = new YamlConfiguration();
@@ -286,6 +303,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             yaml.set(id + ".pressure", market.lastPressure(id));
         }
         yaml.set("next-change", nextMarketChange);
+        stats.save(yaml.createSection(ROUND_KEY));
         var destination = marketFile().toPath();
         var temp = java.nio.file.Files.createTempFile(destination.getParent(), "market-", ".tmp");
         try {
@@ -294,17 +312,30 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             catch (java.nio.file.AtomicMoveNotSupportedException e) { java.nio.file.Files.move(temp, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
         } finally { java.nio.file.Files.deleteIfExists(temp); }
     }
-    void recordMarketSales(Map<String, Long> counts) throws IOException {
-        market.recordSales(counts);
+    void recordMarketSales(String trade, Player player, Map<String, Long> counts) throws IOException {
+        boolean staff = player.hasPermission("maitycoon.admin");
+        Map<String, Long> prices = new HashMap<>();
+        for (String id : counts.keySet()) prices.put(id, market.price(id));
+        if (!stats.record(trade, player.getUniqueId(), staff, counts, prices)) return;
+        if (!staff || adminSalesMovePrice) market.recordSales(counts);
         saveMarket();
     }
     long secondsToNextMarket() { return Math.max(0, (nextMarketChange - System.currentTimeMillis()) / 1000); }
     private void refreshPrices() {
+        Map<String, Long> prices = new HashMap<>(), nextPrices = new HashMap<>(), floors = new HashMap<>();
+        Map<String, Integer> pressures = new HashMap<>();
+        for (String id : market.ids()) { prices.put(id, market.price(id)); floors.put(id, market.floor(id)); }
         List<Market.Move> moves = market.step(ThreadLocalRandom.current());
-        nextMarketChange = System.currentTimeMillis() + marketInterval;
+        for (String id : market.ids()) { nextPrices.put(id, market.price(id)); pressures.put(id, market.lastPressure(id)); }
+        long now = System.currentTimeMillis();
+        nextMarketChange = now + marketInterval;
+        // Written before market.yml: if the server dies between the two, the round closes again under the same id.
+        try { stats.write(stats.close(prices, nextPrices, pressures, floors, now)); }
+        catch (IOException e) { getLogger().log(Level.SEVERE, "Cannot save market stats", e); }
         try { saveMarket(); }
         catch (IOException e) { getLogger().log(Level.SEVERE, "Cannot save market.yml", e); }
         shop.refreshOpen();
+        marketMenu.refreshOpen();
         Market.Move up = moves.stream().max(Comparator.comparingDouble(m -> (double) m.change() / market.base(m.id()))).orElseThrow();
         Market.Move down = moves.stream().min(Comparator.comparingDouble(m -> (double) m.change() / market.base(m.id()))).orElseThrow();
         Component news = Component.text("시세 변동! ").append(moveText(up, NamedTextColor.RED)).append(Component.text(" / ")).append(moveText(down, NamedTextColor.BLUE));
@@ -325,7 +356,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     Profile profile = store.load(player.getUniqueId());
                     tell(player, "보유 골드: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개 · 생활 램프: " + profile.lamps() + "개");
                 }
-                case "price" -> prices(player);
+                case "price" -> marketMenu.open(player);
                 case "buildshop", "seedshop", "cropshop" -> {
                     if (!player.hasPermission("maitycoon.admin")) tell(player, "상점은 광장의 상인을 우클릭해 이용해 주세요.");
                     else shop.open(player, action.equals("buildshop") ? Shop.Kind.BUILD : action.equals("seedshop") ? Shop.Kind.BUY : Shop.Kind.SELL);
@@ -348,11 +379,11 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                     tell(player, "광장의 작물 상인에게 작물을 팔고, 씨앗 상인에게 씨앗과 도구를 살 수 있습니다.");
                     if (player.hasPermission("maitycoon.admin")) tell(player, "/tycoon buildshop | seedshop | cropshop — 관리자 상점 열기");
                     tell(player, "/tycoon starter — 시작 보급품 받기 (1회)");
-                    tell(player, "/tycoon price — 현재 작물 시세 보기");
+                    tell(player, "/tycoon price — 시세 게시판 열기");
                     player.sendMessage(Component.text("[마이 타이쿤] ", NamedTextColor.GREEN).append(Component.keybind("key.swapOffhand", NamedTextColor.YELLOW)).append(Component.text(" 키를 누르면 도감이 열립니다. 구매할 수 있는 땅에서는 구매 화면이 열립니다. 손 바꾸기는 웅크린 채 누르세요.", NamedTextColor.WHITE)));
                     tell(player, "/tycoon dex — 수집 도감 (아이템을 제출해 등록, 30개 달성 시 땅 구매 이용권)");
                     tell(player, "/tycoon land — 땅 지도, 청크 구매, 농장 관리");
-                    tell(player, "/tycoon lamp — 손에 든 괭이에 생활 램프 적용");
+                    tell(player, "/tycoon lamp — 생활 램프 구매, 손에 든 괭이에 적용");
                     tell(player, "/tycoon autoplant — 자동 심기 설정");
                     tell(player, "/tycoon land member add|remove <이름> — 내 땅의 작업자 관리");
                     tell(player, "/tycoon village — 마을 광장으로 이동");
@@ -369,12 +400,14 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         boolean build = action.equals("village") && args.length == 2 && args[1].equalsIgnoreCase("build");
         boolean buildNow = action.equals("village") && args.length == 3 && args[1].equalsIgnoreCase("build") && args[2].equalsIgnoreCase("confirm");
         boolean step = action.equals("market") && args.length == 2 && args[1].equalsIgnoreCase("next");
+        boolean report = action.equals("market") && args.length >= 2 && args[1].equalsIgnoreCase("report");
         boolean records = action.equals("journal");
         boolean giveLamp = (action.equals("lamp") || action.equals("autoplant")) && args.length == 4 && args[1].equalsIgnoreCase("give");
         boolean giveMoney = action.equals("give") && args.length == 4;
-        if (!build && !buildNow && !step && !records && !giveLamp && !giveMoney) return false;
+        if (!build && !buildNow && !step && !report && !records && !giveLamp && !giveMoney) return false;
         if (!sender.hasPermission("maitycoon.admin")) { sender.sendMessage("권한이 없습니다."); return true; }
         if (step) { refreshPrices(); sender.sendMessage("시세를 갱신했습니다."); }
+        else if (report) marketReport(sender, args);
         else if (giveLamp) give(sender, args[2], args[3], action.equals("lamp"));
         else if (giveMoney) giveMoney(sender, args[1], args[2], args[3]);
         else if (build) sender.sendMessage("월드 스폰 주변 약 110칸 사방의 지형을 평탄화하고 마을을 짓습니다. 되돌릴 수 없으니 월드를 백업한 뒤 /tycoon village build confirm 을 입력하세요.");
@@ -385,6 +418,27 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         else journal(sender, args);
         return true;
     }
+    /** /tycoon market report [회차 수] */
+    private void marketReport(CommandSender sender, String[] args) {
+        int wanted = REPORT_ROUNDS;
+        try { if (args.length > 2) wanted = Math.max(1, Integer.parseInt(args[2])); }
+        catch (NumberFormatException e) { sender.sendMessage("/tycoon market report [회차 수]"); return; }
+        try {
+            MarketStats.Summary summary = MarketStats.summarize(stats.recent(wanted));
+            sender.sendMessage("끝난 회차 " + summary.rounds() + "개 · 유저 판매 " + summary.sold() + "개 " + summary.paid() + " 골드 · 관리자 판매 " + summary.adminSold() + "개 " + summary.adminPaid() + " 골드");
+            sender.sendMessage("상위 3종 판매 비중 " + summary.topThreePercent() + "%");
+            for (MarketStats.Total item : summary.items().subList(0, Math.min(REPORT_ITEMS, summary.items().size()))) {
+                sender.sendMessage(" · " + plainName(item.id()) + " 유저 " + item.sold() + "개 " + item.paid() + " 골드 · 관리자 " + item.adminSold() + "개 · 최저가 회차 " + item.floorRounds() * 100 / Math.max(1, summary.rounds()) + "%");
+            }
+            long open = journal.interrupted().stream().filter(entry -> entry.type().equals("sell")).count();
+            long counted = journal.interrupted().stream().filter(entry -> entry.type().equals("sell") && stats.counted(entry.id())).count();
+            sender.sendMessage("진행 중 회차 " + stats.round() + " · 미확정 판매 " + open + "건 (진행 중 회차에 집계됨 " + counted + "건, /tycoon journal 로 확인)");
+        } catch (IOException e) {
+            getLogger().log(Level.SEVERE, "Cannot read market stats", e);
+            sender.sendMessage("시세 통계를 읽지 못했습니다.");
+        }
+    }
+    private String plainName(String id) { return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(catalog.name(id)); }
     /** /tycoon give <이름> gold|zcoin <수량> */
     private void giveMoney(CommandSender sender, String name, String kind, String amount) {
         var target = getServer().getOfflinePlayerIfCached(name);
@@ -440,19 +494,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
      * Runs a trade under a durable journal entry and saves the inventory before closing it, since the server would
      * otherwise write it much later. The entry survives only if the server dies inside the trade.
      */
-    void transact(Player player, String type, String detail, Action action) throws IOException {
+    void transact(Player player, String type, String detail, Action action) throws IOException { transact(player, type, detail, id -> action.run()); }
+    void transact(Player player, String type, String detail, Trade trade) throws IOException {
         String id = journal.begin(player.getUniqueId(), type, detail);
-        action.run();
+        trade.run(id);
         player.saveData();
         journal.finish(id);
-    }
-    private void prices(Player player) {
-        tell(player, "현재 시세 (다음 변동까지 약 " + secondsToNextMarket() + "초)");
-        for (String id : market.ids()) {
-            long change = market.change(id);
-            String trend = change > 0 ? " ▲" + change : change < 0 ? " ▼" + -change : "";
-            player.sendMessage(Component.text(" · ").append(catalog.name(id)).append(Component.text(" " + market.price(id) + " 골드" + trend)));
-        }
     }
     boolean survival(Player player) {
         if (player.getGameMode() == GameMode.SURVIVAL || player.hasPermission("maitycoon.admin")) return true;
@@ -470,6 +517,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         tell(player, "돌 괭이, 밀 씨앗 16개, 빵 8개를 받았습니다. 마을 공용 농장에서 농사를 시작하세요.");
     }
     interface Action { void run() throws IOException; }
+    interface Trade { void run(String id) throws IOException; }
     void guarded(Player player, Action action) {
         try { action.run(); }
         catch (IOException | ArithmeticException | IllegalArgumentException e) {
@@ -484,7 +532,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         String typed = args[args.length - 1].toLowerCase(Locale.ROOT);
         if (args.length == 2 && sender.hasPermission("maitycoon.admin")) {
-            String next = args[0].equalsIgnoreCase("village") ? "build" : args[0].equalsIgnoreCase("market") ? "next" : args[0].equalsIgnoreCase("journal") ? "resolve" : "";
+            String next = args[0].equalsIgnoreCase("village") ? "build" : args[0].equalsIgnoreCase("market") ? ("report".startsWith(typed) ? "report" : "next") : args[0].equalsIgnoreCase("journal") ? "resolve" : "";
             return !next.isEmpty() && next.startsWith(typed) ? List.of(next) : List.of();
         }
         if (args.length != 1) return List.of();

@@ -182,7 +182,7 @@ final class Shop implements Listener {
         String trend = change > 0 ? " ▲" + change : change < 0 ? " ▼" + -change : "";
         return Ui.icon(Material.GOLD_NUGGET, Ui.line(market.price(item) + " 골드" + trend, NamedTextColor.YELLOW), List.of());
     }
-    private String graph(String id) {
+    static String graph(Market market, String id) {
         StringBuilder graph = new StringBuilder();
         int range = Math.max(1, market.maxPercent() - market.minPercent());
         for (int percent : market.trail(id)) graph.append(BARS[(percent - market.minPercent()) * (BARS.length - 1) / range]);
@@ -191,14 +191,14 @@ final class Shop implements Listener {
     private ItemStack sellIcon(String id, Player player, Holder holder) {
         long change = market.change(id);
         Component trend = change > 0 ? Ui.line("▲ " + change, NamedTextColor.RED) : change < 0 ? Ui.line("▼ " + -change, NamedTextColor.BLUE) : Ui.line("-", NamedTextColor.GRAY);
-        return Ui.decorate(catalog.item(id, 1), catalog.name(id).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
+        List<Component> lore = new ArrayList<>(List.of(
             Ui.line("현재 " + market.price(id) + " 골드  ", NamedTextColor.YELLOW).append(trend),
-            Ui.line("시세 " + graph(id), NamedTextColor.GREEN),
+            Ui.line("시세 " + graph(market, id), NamedTextColor.GREEN),
             Ui.line("범위 " + market.floor(id) + " ~ " + market.ceiling(id) + " 골드", NamedTextColor.GRAY),
-            Ui.line("다음 시세까지 약 " + plugin.secondsToNextMarket() / 60 + "분", NamedTextColor.GRAY),
-            Ui.line("보유 " + catalog.count(player, id) + "개", NamedTextColor.GRAY),
-            Ui.line("이번 회차 서버 판매 " + market.sold(id) + "개 · 다음 하락 압력 " + market.pendingPressure(id) + "%", NamedTextColor.GOLD),
-            Ui.line("좌클릭 " + AMOUNTS[holder.amountIndex] + "개 판매 / 우클릭 전부 판매", NamedTextColor.GREEN)));
+            Ui.line("보유 " + catalog.count(player, id) + "개", NamedTextColor.GRAY)));
+        lore.addAll(MarketMenu.supply(market, id, plugin.secondsToNextMarket()));
+        lore.add(Ui.line("좌클릭 " + AMOUNTS[holder.amountIndex] + "개 판매 / 우클릭 전부 판매", NamedTextColor.GREEN));
+        return Ui.decorate(catalog.item(id, 1), catalog.name(id).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), lore);
     }
     private ItemStack buyIcon(String item, Holder holder) {
         return Ui.decorate(catalog.item(item, 1), catalog.name(item).color(NamedTextColor.WHITE).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false), List.of(
@@ -223,10 +223,10 @@ final class Shop implements Listener {
     }
     private void execute(Player player, Quote quote) throws IOException {
         var id = player.getUniqueId();
-        plugin.transact(player, "sell", quote.counts() + " +" + quote.total(), () -> {
+        plugin.transact(player, "sell", quote.counts() + " +" + quote.total(), trade -> {
             store.save(id, store.load(id).sell(quote.total()));
             take(player, quote.counts());
-            plugin.recordMarketSales(quote.counts());
+            plugin.recordMarketSales(trade, player, quote.counts());
         });
         Component what = quote.counts().size() == 1 ? catalog.name(quote.counts().keySet().iterator().next()) : Component.text("작물");
         plugin.tell(player, what.append(Component.text(" " + quote.count() + "개를 판매했습니다. +" + money(quote.total()) + " 골드 · 잔액 " + money(store.load(id).coins()) + " 골드")));

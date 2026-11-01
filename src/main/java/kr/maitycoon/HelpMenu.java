@@ -44,7 +44,7 @@ final class HelpMenu implements Listener {
         inventory.setItem(14, entry(Material.EMERALD, "시세", List.of(
             text("작물값은 10분마다 바뀝니다."),
             text("많이 팔린 작물은 다음 시세에서 값이 내려갑니다."),
-            text("/tycoon price 로 현재 시세를 봅니다."))));
+            text("/tycoon price 로 시세 게시판을 엽니다."))));
         inventory.setItem(16, entry(Material.WRITABLE_BOOK, "수집 도감", List.of(
             text("아이템은 1개를 제출해 등록합니다."),
             text("몬스터는 처치하면, 바이옴은 방문하면 자동 등록됩니다."),
@@ -54,17 +54,18 @@ final class HelpMenu implements Listener {
             text("살수록 비싸지고, 구매 이용권이 필요합니다."),
             text("남이 내 땅의 작물을 거두면 발자국이 남고 신고할 수 있습니다."))));
         inventory.setItem(30, entry(Material.GLOWSTONE_DUST, "생활 램프와 자동 심기", List.of(
-            text("토지 관리인 메뉴에서 쓸 수 있습니다."),
-            text("램프는 괭이에 수확 보너스를 붙입니다."),
-            text("자동 심기는 수확한 자리에 다시 심습니다."))));
+            text("램프 상인에게 골드로 램프를 삽니다."),
+            text("괭이를 든 채 램프 상인을 누르면 수확 보너스를 붙입니다."),
+            text("자동 심기는 토지 관리인 메뉴에서 켭니다."))));
         inventory.setItem(32, entry(Material.CHEST, "상인", List.of(
-            text("작물 상인, 씨앗 상인, 건축 자재 상인, 가구 상인"),
-            text("도감 사서, 토지 관리인, 안내원이 광장에 있습니다."),
+            text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽에 함께 있습니다."),
+            text("건축 자재 상인, 가구 상인도 광장에 있습니다."),
+            text("도감 사서, 토지 관리인, 안내원도 만날 수 있습니다."),
             text("NPC를 우클릭하면 메뉴가 열립니다."))));
         inventory.setItem(34, entry(Material.PAPER, "명령어", List.of(
             text("/도움말  이 화면"),
             text("/tycoon info  보유 재화"),
-            text("/tycoon price  시세"),
+            text("/tycoon price  시세 게시판"),
             text("/tycoon village  마을로 이동"),
             text("/tycoon starter  시작 보급품"),
             text("/tycoon land member add 이름  내 땅 작업자 추가"))));
