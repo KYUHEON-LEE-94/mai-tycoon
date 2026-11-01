@@ -30,6 +30,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private ResourcePack resourcePack;
     private Catalog catalog;
     private CustomCrops customCrops;
+    private FarmIndex farmIndex;
+    private FarmStatusMenu farmStatus;
     private Lamps lamps;
     private MiniMap miniMap;
     private HelpMenu helpMenu;
@@ -104,8 +106,13 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(lands, this);
             int cropLimit = getConfig().getInt("custom-crops.chunk-limit");
             if (cropLimit < 1) throw new IOException("Invalid custom crop limit");
-            customCrops = new CustomCrops(this, catalog, village, lands, cropLimit, getConfig().getBoolean("custom-crops.bone-meal"));
+            farmIndex = new FarmIndex(getDataFolder().toPath().resolve("farm-index.yml"));
+            try { farmIndex.load(); }
+            catch (IOException e) { getLogger().log(Level.WARNING, "Rebuilding the farm index as chunks load", e); }
+            customCrops = new CustomCrops(this, catalog, village, lands, farmIndex, cropLimit, getConfig().getBoolean("custom-crops.bone-meal"));
             getServer().getPluginManager().registerEvents(customCrops, this);
+            farmStatus = new FarmStatusMenu(this, lands, farmIndex, catalog);
+            getServer().getPluginManager().registerEvents(farmStatus, this);
             village.onShowcase(customCrops::plantShowcase);
             long lampPrice = getConfig().getLong("lamp-shop.price");
             if (lampPrice < 1) throw new IOException("Invalid lamp price");
@@ -146,6 +153,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getScheduler().runTaskTimer(this, () -> lands.refreshBanners(), 40L, 20L);
             getServer().getScheduler().runTaskTimer(this, () -> miniMap.refresh(), 40L, 20L);
             getServer().getScheduler().runTaskTimer(this, () -> dexMenu.checkBiomes(), 60L, 40L);
+            getServer().getScheduler().runTaskTimer(this, this::saveFarmIndex, 600L, 600L);
             getServer().getScheduler().runTask(this, () -> {
                 customCrops.start();
                 if (village.built()) { getServer().setSpawnRadius(0); village.upgradeStructures(); village.ensureNpcs(); }
@@ -175,7 +183,15 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
         if (changed) saveConfig();
     }
-    @Override public void onDisable() { if (resourcePack != null) resourcePack.stop(); }
+    @Override public void onDisable() {
+        if (resourcePack != null) resourcePack.stop();
+        if (farmIndex != null) saveFarmIndex();
+    }
+    private void saveFarmIndex() {
+        try { farmIndex.saveIfChanged(); }
+        catch (IOException e) { getLogger().log(Level.SEVERE, "Cannot save farm index", e); }
+    }
+    void openFarmStatus(Player player) { farmStatus.open(player); }
     private Market loadMarket() throws IOException {
         var section = getConfig().getConfigurationSection("crops");
         if (section == null) throw new IOException("Missing crops");

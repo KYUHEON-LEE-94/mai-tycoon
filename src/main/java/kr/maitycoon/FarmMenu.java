@@ -21,7 +21,7 @@ final class FarmMenu implements Listener {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int BODY_START = 9, BODY_SIZE = 36, BACK = 45, WORKERS = 49;
+    private static final int BODY_START = 9, BODY_SIZE = 36, BACK = 45, STATUS = 47, WORKERS = 49;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
     private final MaiTycoonPlugin plugin;
     private final Lands lands;
@@ -54,6 +54,7 @@ final class FarmMenu implements Listener {
         names.add(Ui.line("/tycoon land member add <이름> 으로 추가합니다.", NamedTextColor.DARK_GRAY));
         names.add(Ui.line("작업자는 수확, 파종, 경작만 할 수 있습니다.", NamedTextColor.DARK_GRAY));
         inventory.setItem(WORKERS, Ui.icon(Material.PLAYER_HEAD, Ui.line("작업자 " + (names.size() - 2) + "명", NamedTextColor.GREEN), names));
+        inventory.setItem(STATUS, Ui.icon(Material.WHEAT, Ui.line("작물 현황", NamedTextColor.YELLOW), List.of(Ui.line("내 땅의 특산 작물과 수확 시각을 봅니다.", NamedTextColor.GRAY))));
         inventory.setItem(BACK, Ui.icon(Material.ARROW, Ui.line("땅 지도로", NamedTextColor.WHITE), List.of()));
     }
     @EventHandler
@@ -63,6 +64,7 @@ final class FarmMenu implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         int slot = event.getRawSlot();
         if (slot == BACK) { plugin.getServer().getScheduler().runTask(plugin, () -> lands.open(player)); return; }
+        if (slot == STATUS) { plugin.getServer().getScheduler().runTask(plugin, () -> plugin.openFarmStatus(player)); return; }
         String id = holder.footprints.get(slot);
         if (id == null || event.getClick() != ClickType.RIGHT) return;
         plugin.guarded(player, () -> { lands.report(player, id); render(holder, player); });

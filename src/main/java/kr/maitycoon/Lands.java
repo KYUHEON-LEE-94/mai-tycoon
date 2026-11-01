@@ -350,6 +350,9 @@ final class Lands implements Listener {
         Object top = event.getView().getTopInventory().getHolder();
         if (top instanceof Holder || top instanceof BuyHolder) event.setCancelled(true);
     }
+    List<String> ownedKeys(UUID owner) { return registry.parcels().entrySet().stream().filter(entry -> entry.getValue().owner().equals(owner)).map(Map.Entry::getKey).toList(); }
+    boolean owned(org.bukkit.Chunk chunk) { return registry.owner(key(chunk.getWorld(), chunk.getX(), chunk.getZ())) != null; }
+    void openFarm(Player player) { farmMenu.open(player); }
     List<FootprintLog.Footprint> reportable(Player player) { return footprints.reportable(player.getUniqueId(), System.currentTimeMillis()); }
     List<String> workerNames(Player player) { return registry.workers(player.getUniqueId()).stream().map(this::ownerName).sorted().toList(); }
     void report(Player player, String id) throws IOException {

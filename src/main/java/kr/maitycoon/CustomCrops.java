@@ -32,11 +32,13 @@ final class CustomCrops implements Listener {
     private final Catalog catalog;
     private final Village village;
     private final Lands lands;
+    private final FarmIndex index;
     private final int chunkLimit;
     private final boolean boneMeal;
     private final NamespacedKey fieldKey, displayKey;
     private final Map<Chunk, CropField> fields = new HashMap<>();
-    CustomCrops(MaiTycoonPlugin plugin, Catalog catalog, Village village, Lands lands, int chunkLimit, boolean boneMeal) {
+    CustomCrops(MaiTycoonPlugin plugin, Catalog catalog, Village village, Lands lands, FarmIndex index, int chunkLimit, boolean boneMeal) {
+        this.index = index;
         this.boneMeal = boneMeal;
         this.plugin = plugin;
         this.catalog = catalog;
@@ -70,15 +72,30 @@ final class CustomCrops implements Listener {
     }
     private void load(Chunk chunk) {
         String stored = chunk.getPersistentDataContainer().get(fieldKey, PersistentDataType.STRING);
-        if (stored == null) return;
-        try { fields.put(chunk, CropField.decode(stored)); }
+        if (stored == null) {
+            if (lands.owned(chunk)) index.update(key(chunk), List.of(), System.currentTimeMillis());
+            else index.forget(key(chunk));
+            return;
+        }
+        try {
+            CropField field = CropField.decode(stored);
+            fields.put(chunk, field);
+            index.update(key(chunk), field.plots(), System.currentTimeMillis());
+        }
         catch (IllegalArgumentException e) { plugin.getLogger().warning("Ignoring damaged crop data in chunk " + chunk.getX() + "," + chunk.getZ()); }
     }
     @EventHandler public void onChunkLoad(ChunkLoadEvent event) { load(event.getChunk()); }
-    @EventHandler public void onChunkUnload(ChunkUnloadEvent event) { fields.remove(event.getChunk()); }
+    /** Nothing can change while unloaded, so the moment of unloading is what the record is good for. */
+    @EventHandler public void onChunkUnload(ChunkUnloadEvent event) {
+        Chunk chunk = event.getChunk();
+        CropField field = fields.remove(chunk);
+        if (index.entry(key(chunk)) != null) index.update(key(chunk), field == null ? List.of() : field.plots(), System.currentTimeMillis());
+    }
+    private static String key(Chunk chunk) { return LandRegistry.key(chunk.getWorld().getUID().toString(), chunk.getX(), chunk.getZ()); }
     private void save(Chunk chunk, CropField field) {
         if (field.size() == 0) { chunk.getPersistentDataContainer().remove(fieldKey); fields.remove(chunk); }
         else chunk.getPersistentDataContainer().set(fieldKey, PersistentDataType.STRING, field.encode());
+        index.update(key(chunk), field.plots(), System.currentTimeMillis());
     }
     private CropField field(Block block) { return fields.get(block.getChunk()); }
     private CropField.Plot plot(Block block) {
