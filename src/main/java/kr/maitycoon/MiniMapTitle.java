@@ -23,18 +23,21 @@ public final class MiniMapTitle {
     public static final int PURSE_WIDTH = 76;
     private static final int DIGIT_ADVANCE = 4, LABEL_ADVANCE = 14, PURSE_PADDING = 5;
     private static final TextColor GOLD = TextColor.color(0xF2DDA4);
-    public static final int OTHER = 0xFFE040, RADIUS = CELLS / 2, NAME_WIDTH = 5, NAME_ADVANCE = NAME_WIDTH + 1, NAME_HEIGHT = 7, NAME_COLUMNS = 16, NAME_ROW_STEP = 3;
+    public static final int FULL_COLUMNS = 54, FULL_ROWS = 36, CELLS_PER_SLOT = 6, OTHER = 0xFFE040, RADIUS = CELLS / 2, NAME_WIDTH = 5, NAME_ADVANCE = NAME_WIDTH + 1, NAME_HEIGHT = 7, NAME_COLUMNS = 16, NAME_ROW_STEP = 3;
     /** Every character a Minecraft name can hold, plus the space and the metres after a distance. */
     public static final String NAME_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ ";
     /** Where a player's dot goes and the words beside it. */
     public record Marker(int column, int row, String text) {}
     private MiniMapTitle() {}
     /** Someone past the edge stays on the map, pinned in their direction with the distance beside the name. */
-    public static Marker pin(int cellsEast, int cellsSouth, int metres, String name) {
-        int far = Math.max(Math.abs(cellsEast), Math.abs(cellsSouth));
-        if (far <= RADIUS) return new Marker(RADIUS + cellsEast, RADIUS + cellsSouth, name);
-        return new Marker(RADIUS + Math.round(cellsEast * (float) RADIUS / far), RADIUS + Math.round(cellsSouth * (float) RADIUS / far), name + " " + metres + "m");
+    public static Marker pin(int cellsEast, int cellsSouth, int metres, String name) { return pin(RADIUS, RADIUS, cellsEast, cellsSouth, metres, name); }
+    public static Marker pin(int centerColumn, int centerRow, int cellsEast, int cellsSouth, int metres, String name) {
+        float far = Math.max(Math.abs(cellsEast) / (float) centerColumn, Math.abs(cellsSouth) / (float) centerRow);
+        if (far <= 1) return new Marker(centerColumn + cellsEast, centerRow + cellsSouth, name);
+        return new Marker(centerColumn + Math.round(cellsEast / far), centerRow + Math.round(cellsSouth / far), name + " " + metres + "m");
     }
+    /** Half terrain, half tint, so owned land still shows what is on it. */
+    public static int mix(int color, int tint) { return (color >> 1 & 0x7F7F7F) + (tint >> 1 & 0x7F7F7F); }
     private static Component space(int delta) {
         StringBuilder spaces = new StringBuilder();
         int base = delta < 0 ? 0xE000 : 0xE100, left = Math.abs(delta);
@@ -57,8 +60,20 @@ public final class MiniMapTitle {
         title.append(space(LEFT - FRAME_MARGIN - used));
         title.append(Component.text(FRAME).font(GUI));
         title.append(space(FRAME_MARGIN - (MAP_SIZE + FRAME_MARGIN * 2 + 1)));
+        grid(title, cells, "mm");
+        names(title, markers, MAP_SIZE, CELLS, "mn");
+        return title.build();
+    }
+    /** The large map for a chest title: the same drawing with fonts placed for the inside of a window. */
+    public static Component fullMap(int[][] cells, List<Marker> markers) {
+        TextComponent.Builder title = Component.text().color(NamedTextColor.WHITE);
+        grid(title, cells, "fm");
+        names(title, markers, FULL_COLUMNS * CELL_SIZE, FULL_ROWS, "fn");
+        return title.build();
+    }
+    private static void grid(TextComponent.Builder title, int[][] cells, String fonts) {
         for (int row = 0; row < cells.length; row++) {
-            Key font = Key.key("maitycoon", "mm" + row);
+            Key font = Key.key("maitycoon", fonts + row);
             int[] line = cells[row];
             for (int start = 0; start < line.length; ) {
                 int end = start;
@@ -68,26 +83,27 @@ public final class MiniMapTitle {
             }
             title.append(space(row == cells.length - 1 ? 0 : -line.length * CELL_SIZE));
         }
+    }
+    private static void names(TextComponent.Builder title, List<Marker> markers, int mapWidth, int rows, String fonts) {
         Set<Integer> taken = new HashSet<>();
-        for (Marker marker : markers) label(title, marker, freeRow(marker.row(), taken));
-        return title.build();
+        for (Marker marker : markers) label(title, marker, mapWidth, fonts + freeRow(marker.row(), rows, taken));
     }
     /** Two names on one line would print over each other, so the later one moves to the nearest free line. */
-    private static int freeRow(int row, Set<Integer> taken) {
-        for (int step = 0; step < CELLS; step++) for (int side : new int[]{1, -1}) {
+    private static int freeRow(int row, int rows, Set<Integer> taken) {
+        for (int step = 0; step < rows; step++) for (int side : new int[]{1, -1}) {
             int line = row + side * step * NAME_ROW_STEP;
-            if (line >= 0 && line < CELLS && taken.add(line)) return line;
+            if (line >= 0 && line < rows && taken.add(line)) return line;
         }
         return row;
     }
     /** Each name starts and ends at the map's right edge, so names never change the width that centres the bar. */
-    private static void label(TextComponent.Builder title, Marker marker, int row) {
+    private static void label(TextComponent.Builder title, Marker marker, int mapWidth, String font) {
         StringBuilder text = new StringBuilder();
         for (char c : marker.text().toCharArray()) text.append(NAME_CHARS.indexOf(c) >= 0 ? c : '_');
         int width = text.length() * NAME_ADVANCE, x = (marker.column() + 1) * CELL_SIZE + 1;
-        if (x + width > MAP_SIZE) x = marker.column() * CELL_SIZE - 1 - width;
-        title.append(space(x - MAP_SIZE));
-        title.append(Component.text(text.toString()).font(Key.key("maitycoon", "mn" + row)).color(TextColor.color(OTHER)));
-        title.append(space(MAP_SIZE - x - width));
+        if (x + width > mapWidth) x = marker.column() * CELL_SIZE - 1 - width;
+        title.append(space(x - mapWidth));
+        title.append(Component.text(text.toString()).font(Key.key("maitycoon", font)).color(TextColor.color(OTHER)));
+        title.append(space(mapWidth - x - width));
     }
 }

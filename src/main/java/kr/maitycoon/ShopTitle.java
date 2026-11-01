@@ -28,6 +28,16 @@ final class ShopTitle {
         title.append(Component.text(name,GOLD));
         return this;
     }
+    /** The panel with a picture over its slots. The name goes last because its width is only known to the client. */
+    ShopTitle mapPanel(String name,int[][] cells,java.util.List<MiniMapTitle.Marker> markers){
+        tiles(0xE800);
+        moveTo(MenuLayout.LEFT);
+        title.append(MiniMapTitle.fullMap(cells,markers));
+        cursor+=cells[0].length*MiniMapTitle.CELL_SIZE;
+        moveTo(8);
+        title.append(Component.text(name,GOLD));
+        return this;
+    }
     ShopTitle background(Shop.Kind kind){
         tiles(switch(kind){case SELL->0xE300;case BUY->0xE400;case BUILD->0xE600;case FURNITURE->0xE900;});
         return this;

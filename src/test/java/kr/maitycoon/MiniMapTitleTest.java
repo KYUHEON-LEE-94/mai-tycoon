@@ -53,6 +53,20 @@ class MiniMapTitleTest {
         }
         assertEquals(0, net);
     }
+    @Test void aWideMapPinsAlongItsOwnShape() {
+        var marker = MiniMapTitle.pin(26, 17, 0, 40, 640, "kai");
+        assertEquals(new MiniMapTitle.Marker(26, 34, "kai 640m"), marker);
+        assertEquals(new MiniMapTitle.Marker(30, 20, "kai"), MiniMapTitle.pin(26, 17, 4, 3, 50, "kai"));
+    }
+    @Test void tintKeepsSomeOfTheTerrain() {
+        assertEquals(0x7F7F7F, MiniMapTitle.mix(0xFFFFFF, 0));
+        assertNotEquals(MiniMapTitle.mix(0x204060, 0xFF0000), MiniMapTitle.mix(0x604020, 0xFF0000));
+    }
+    @Test void theFullMapDrawsEveryCell() {
+        int[][] cells = new int[MiniMapTitle.FULL_ROWS][MiniMapTitle.FULL_COLUMNS];
+        long glyphs = MiniMapTitle.fullMap(cells, java.util.List.of()).children().stream().map(c -> ((TextComponent) c).content()).mapToLong(s -> s.chars().filter(ch -> ch == 0xE230).count()).sum();
+        assertEquals((long) MiniMapTitle.FULL_ROWS * MiniMapTitle.FULL_COLUMNS, glyphs);
+    }
     @Test void namesOnOneLineSeparate() {
         var named = MiniMapTitle.render(filled(0), 0, java.util.List.of(new MiniMapTitle.Marker(2, 5, "kai"), new MiniMapTitle.Marker(9, 5, "ari"))).children();
         assertEquals("mn5", named.get(named.size() - 5).font().value());

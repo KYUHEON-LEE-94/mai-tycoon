@@ -21,13 +21,15 @@ final class MiniMap implements Listener {
     private record Cached(int color, long at) {}
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
+    private final Lands lands;
     private final Map<UUID, BossBar> bars = new HashMap<>(), purses = new HashMap<>();
     private final Map<UUID, Long> balances = new HashMap<>();
     private final Map<UUID, String> painted = new HashMap<>();
     private final Map<String, Cached> terrain = new HashMap<>();
-    MiniMap(MaiTycoonPlugin plugin, ProfileStore store) {
+    MiniMap(MaiTycoonPlugin plugin, ProfileStore store, Lands lands) {
         this.plugin = plugin;
         this.store = store;
+        this.lands = lands;
     }
     /** Reads only loaded chunks: a map must never force the world to generate. Cached so players nearby share the work. */
     private int color(World world, int cellX, int cellZ, long now) {
@@ -58,7 +60,9 @@ final class MiniMap implements Listener {
             int centerX = cell(at.getBlockX()), centerZ = cell(at.getBlockZ());
             int[][] cells = new int[MiniMapTitle.CELLS][MiniMapTitle.CELLS];
             for (int row = 0; row < cells.length; row++) for (int column = 0; column < cells.length; column++) {
-                cells[row][column] = color(world, centerX + column - RADIUS, centerZ + row - RADIUS, now);
+                int cellX = centerX + column - RADIUS, cellZ = centerZ + row - RADIUS, tint = lands.tint(player, cellX * BLOCKS_PER_CELL >> 4, cellZ * BLOCKS_PER_CELL >> 4);
+                cells[row][column] = color(world, cellX, cellZ, now);
+                if (tint != Lands.NO_TINT) cells[row][column] = MiniMapTitle.mix(cells[row][column], tint);
             }
             List<MiniMapTitle.Marker> markers = markers(player, centerX, centerZ);
             for (MiniMapTitle.Marker marker : markers) cells[marker.row()][marker.column()] = MiniMapTitle.OTHER;
@@ -77,12 +81,15 @@ final class MiniMap implements Listener {
         }
     }
     /** Everyone in this world, however far. Sorted so a name keeps its line while people move. Spectators stay hidden, as they do in the world. */
-    private List<MiniMapTitle.Marker> markers(Player player, int centerX, int centerZ) {
+    static List<Player> others(Player player) {
         List<Player> others = new ArrayList<>(player.getWorld().getPlayers());
         others.removeIf(other -> other.equals(player) || other.getGameMode() == GameMode.SPECTATOR || !player.canSee(other));
         others.sort(Comparator.comparing(Player::getName));
+        return others;
+    }
+    private List<MiniMapTitle.Marker> markers(Player player, int centerX, int centerZ) {
         List<MiniMapTitle.Marker> markers = new ArrayList<>();
-        for (Player other : others) {
+        for (Player other : others(player)) {
             Location at = other.getLocation();
             int metres = (int) (at.distance(player.getLocation()) / METRES_ROUNDED_TO) * METRES_ROUNDED_TO;
             markers.add(MiniMapTitle.pin(cell(at.getBlockX()) - centerX, cell(at.getBlockZ()) - centerZ, metres, other.getName()));

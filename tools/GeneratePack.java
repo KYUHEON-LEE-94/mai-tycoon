@@ -624,6 +624,11 @@ public class GeneratePack {
             int ascent = MiniMapTitle.CELL_SIZE - row * MiniMapTitle.CELL_SIZE + (MiniMapTitle.NAME_HEIGHT - MiniMapTitle.CELL_SIZE) / 2;
             text("assets/maitycoon/font/mn" + row + ".json", "{\"providers\":[" + bitmap("minimap_names.png", MiniMapTitle.NAME_HEIGHT, ascent, rows.toString()) + "]}");
         }
+        for (int row = 0; row < MiniMapTitle.FULL_ROWS; row++) {
+            int top = MenuLayout.TOP + row * MiniMapTitle.CELL_SIZE;
+            text("assets/maitycoon/font/fm" + row + ".json", "{\"providers\":[" + bitmap("minimap_cell.png", MiniMapTitle.CELL_SIZE, 13 - top, "\\ue230") + ",{\"type\":\"space\",\"advances\":{\"\\ue231\":-1}}]}");
+            text("assets/maitycoon/font/fn" + row + ".json", "{\"providers\":[" + bitmap("minimap_names.png", MiniMapTitle.NAME_HEIGHT, 13 - top + (MiniMapTitle.NAME_HEIGHT - MiniMapTitle.CELL_SIZE) / 2, rows.toString()) + "]}");
+        }
         // Bitmap glyphs over 256px are dropped by the client, so the frame is drawn at 3x rather than SCALE.
         int frameScale = 3;
         var frame = new BufferedImage(MINIMAP_FRAME * frameScale, MINIMAP_FRAME * frameScale, BufferedImage.TYPE_INT_ARGB);

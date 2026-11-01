@@ -34,6 +34,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private FarmStatusMenu farmStatus;
     private Lamps lamps;
     private MiniMap miniMap;
+    private FullMap fullMap;
     private HelpMenu helpMenu;
     private Tractors tractors;
     private AutoPlanting autoPlanting;
@@ -41,7 +42,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private WalletLog walletLog;
     private WalletMenu wallet;
     private long marketInterval, nextMarketChange;
-    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "wallet", "village", "dex", "land", "lamp", "autoplant");
+    private static final List<String> ACTIONS = List.of("help", "info", "starter", "price", "wallet", "village", "dex", "land", "lamp", "autoplant", "map");
     private static final String CUSTOM_CATEGORY = "특산물", ROUND_KEY = "stats-round";
     private static final int REPORT_ROUNDS = 144, REPORT_ITEMS = 10;
     private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
@@ -126,8 +127,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(marketMenu, this);
             helpMenu = new HelpMenu(this);
             getServer().getPluginManager().registerEvents(helpMenu, this);
-            miniMap = new MiniMap(this, store);
+            miniMap = new MiniMap(this, store, lands);
             getServer().getPluginManager().registerEvents(miniMap, this);
+            fullMap = new FullMap(this, village, lands, getDataFolder().toPath().resolve("map-colors.txt"));
+            getServer().getPluginManager().registerEvents(fullMap, this);
+            getServer().getScheduler().runTaskTimer(this, () -> fullMap.saveIfChanged(), 6000L, 6000L);
+            installDatapack();
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
             if (plantPrice < 1 || plantUses < 1) throw new IOException("Invalid auto-plant settings");
             boolean tractorOn = getConfig().getBoolean("tractor.enabled");
@@ -190,6 +195,23 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     @Override public void onDisable() {
         if (resourcePack != null) resourcePack.stop();
         if (farmIndex != null) saveFarmIndex();
+        if (fullMap != null) fullMap.saveIfChanged();
+    }
+    /** Key presses never reach a server; the quick action key is the one key a data pack can give a meaning to. Data packs load before plugins, so a new copy works from the next start. */
+    private void installDatapack() throws IOException {
+        var root = getServer().getWorlds().get(0).getWorldFolder().toPath().resolve("datapacks/maitycoon");
+        boolean changed = false;
+        for (String name : List.of("pack.mcmeta", "data/minecraft/tags/dialog/quick_actions.json", "data/maitycoon/dialog/full_map.json")) {
+            var target = root.resolve(name);
+            try (var source = Objects.requireNonNull(getResource("datapack/" + name))) {
+                byte[] wanted = source.readAllBytes();
+                if (java.nio.file.Files.exists(target) && Arrays.equals(java.nio.file.Files.readAllBytes(target), wanted)) continue;
+                java.nio.file.Files.createDirectories(target.getParent());
+                java.nio.file.Files.write(target, wanted);
+                changed = true;
+            }
+        }
+        if (changed) getLogger().warning("Quick action data pack installed. Restart the server once to enable it.");
     }
     private void saveFarmIndex() {
         try { farmIndex.saveIfChanged(); }
@@ -387,6 +409,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "lamp" -> lamps.open(player);
                 case "wallet" -> wallet.open(player);
                 case "autoplant" -> autoPlanting.open(player);
+                case "map" -> fullMap.open(player);
                 case "land" -> {
                     if (args.length >= 2 && args[1].equalsIgnoreCase("member")) lands.memberCommand(player, args);
                     else if (args.length >= 2 && args[1].equalsIgnoreCase("buy")) lands.openBuy(player);

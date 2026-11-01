@@ -55,6 +55,7 @@ final class Lands implements Listener {
         @Override public Inventory getInventory() { return inventory; }
     }
     private enum Status { VILLAGE, MINE, TAKEN, FREE }
+    static final int NO_TINT = -1, MINE_TINT = 0x2EE66B, TAKEN_TINT = 0xFF4A4A;
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
     private final Village village;
@@ -486,6 +487,12 @@ final class Lands implements Listener {
     /** Keys are world:x:z, so the coordinates can be read without loading the chunk. */
     List<String> parcelNames(Player player) {
         return ownedKeys(player.getUniqueId()).stream().map(key -> key.split(":")).map(parts -> "청크 " + parts[1] + ", " + parts[2]).sorted().toList();
+    }
+    /** The map colour of a chunk as this player should see it. */
+    int tint(Player player, int chunkX, int chunkZ) {
+        UUID owner = registry.owner(key(player.getWorld(), chunkX, chunkZ));
+        if (owner == null) return NO_TINT;
+        return owner.equals(player.getUniqueId()) ? MINE_TINT : TAKEN_TINT;
     }
     boolean owned(org.bukkit.Chunk chunk) { return registry.owner(key(chunk.getWorld(), chunk.getX(), chunk.getZ())) != null; }
     void openFarm(Player player) { farmMenu.open(player); }
