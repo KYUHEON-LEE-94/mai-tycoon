@@ -6,3 +6,6 @@ target/
 server/
 
 dist/
+client/.gradle/
+client/build/
+client/run/

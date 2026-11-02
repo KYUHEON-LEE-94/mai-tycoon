@@ -490,9 +490,17 @@ final class Lands implements Listener {
     }
     /** The map colour of a chunk as this player should see it. */
     int tint(Player player, int chunkX, int chunkZ) {
+        return switch (ownership(player, chunkX, chunkZ)) {
+            case kr.maitycoon.protocol.Wire.MINE -> MINE_TINT;
+            case kr.maitycoon.protocol.Wire.TAKEN -> TAKEN_TINT;
+            default -> NO_TINT;
+        };
+    }
+    /** Whose a chunk is from this player's point of view, without saying who else owns it. */
+    int ownership(Player player, int chunkX, int chunkZ) {
         UUID owner = registry.owner(key(player.getWorld(), chunkX, chunkZ));
-        if (owner == null) return NO_TINT;
-        return owner.equals(player.getUniqueId()) ? MINE_TINT : TAKEN_TINT;
+        if (owner == null) return kr.maitycoon.protocol.Wire.NONE;
+        return owner.equals(player.getUniqueId()) ? kr.maitycoon.protocol.Wire.MINE : kr.maitycoon.protocol.Wire.TAKEN;
     }
     boolean owned(org.bukkit.Chunk chunk) { return registry.owner(key(chunk.getWorld(), chunk.getX(), chunk.getZ())) != null; }
     void openFarm(Player player) { farmMenu.open(player); }

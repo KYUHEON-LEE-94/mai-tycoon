@@ -225,6 +225,12 @@ land:
   theft: false
   # 발자국을 신고할 수 있는 기간(일). 원본 수치는 미확인이라 개발용 값입니다.
   report-days: 7
+# Mai Tycoon 클라이언트 모드(protocol/PROTOCOL.md).
+client:
+  # true면 모드가 없거나 버전이 맞지 않는 접속을 안내와 함께 내보냅니다. 모드팩 배포와 검증을 마치기 전에는 false로 둡니다.
+  required: false
+  # 접속 후 모드의 응답을 기다리는 시간(초). 기다리는 동안에는 이동과 상호작용을 막습니다.
+  wait-seconds: 10
 # 상점 화면용 리소스팩을 내려받는 주소. 다른 사람이 접속하는 서버라면 host를 공인 주소로 바꾸고 포트를 여세요.
 pack:
   host: 127.0.0.1

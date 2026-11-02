@@ -133,6 +133,9 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(fullMap, this);
             getServer().getScheduler().runTaskTimer(this, () -> fullMap.saveIfChanged(), 6000L, 6000L);
             installDatapack();
+            ClientLink clientLink = new ClientLink(this, fullMap, getConfig().getBoolean("client.required"), Math.max(1, getConfig().getInt("client.wait-seconds")));
+            clientLink.register();
+            getServer().getPluginManager().registerEvents(clientLink, this);
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
             if (plantPrice < 1 || plantUses < 1) throw new IOException("Invalid auto-plant settings");
             boolean tractorOn = getConfig().getBoolean("tractor.enabled");

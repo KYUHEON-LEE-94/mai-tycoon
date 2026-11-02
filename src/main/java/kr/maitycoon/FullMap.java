@@ -20,6 +20,7 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import kr.maitycoon.protocol.Wire;
 
 /** One cell per chunk around the player. Reading an unloaded chunk would load it, so the map shows the colours seen when chunks were last loaded. */
 final class FullMap implements Listener {
@@ -68,9 +69,38 @@ final class FullMap implements Listener {
             changed = false;
         } catch (IOException e) { plugin.getLogger().log(Level.WARNING, "Cannot save map colours", e); }
     }
+    /** The recorded colour, refreshed when the chunk is loaded now. Only the village world is recorded. */
+    private Integer terrain(World world, int chunkX, int chunkZ) {
+        boolean recorded = world.equals(village.world());
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            if (!recorded) return world.getHighestBlockAt((chunkX << 4) + CHUNK_MIDDLE, (chunkZ << 4) + CHUNK_MIDDLE).getBlockData().getMapColor().asRGB();
+            sample(world, chunkX, chunkZ);
+        }
+        return recorded ? colors.get(key(chunkX, chunkZ)) : null;
+    }
+    /** What the client mod draws: raw colours and who holds each chunk, so the client decides how to show them. */
+    Wire.MapData data(Player player, int requestId, int half) {
+        World world = player.getWorld();
+        Location at = player.getLocation();
+        int side = half * 2, originX = (at.getBlockX() >> 4) - half, originZ = (at.getBlockZ() >> 4) - half;
+        int[] terrain = new int[side * side];
+        byte[] overlays = new byte[side * side];
+        for (int row = 0; row < side; row++) for (int column = 0; column < side; column++) {
+            int chunkX = originX + column, chunkZ = originZ + row, index = row * side + column;
+            Integer color = terrain(world, chunkX, chunkZ);
+            terrain[index] = color == null ? Wire.UNKNOWN : color;
+            int owner = lands.ownership(player, chunkX, chunkZ);
+            overlays[index] = (byte) (owner != Wire.NONE ? owner : village.overlaps(world, chunkX, chunkZ) ? Wire.VILLAGE : Wire.NONE);
+        }
+        List<Wire.Mark> players = new ArrayList<>();
+        for (Player other : MiniMap.others(player)) {
+            if (players.size() == Wire.MAX_LIST) break;
+            players.add(new Wire.Mark(other.getName(), other.getLocation().getBlockX(), other.getLocation().getBlockZ()));
+        }
+        return new Wire.MapData(requestId, originX, originZ, side, side, terrain, overlays, at.getBlockX(), at.getBlockZ(), players);
+    }
     private int color(Player player, World world, int chunkX, int chunkZ) {
-        if (world.isChunkLoaded(chunkX, chunkZ)) sample(world, chunkX, chunkZ);
-        Integer known = colors.get(key(chunkX, chunkZ));
+        Integer known = terrain(world, chunkX, chunkZ);
         int tint = lands.tint(player, chunkX, chunkZ);
         if (tint != Lands.NO_TINT) return MiniMapTitle.mix(known == null ? UNKNOWN : known, tint);
         if (village.overlaps(world, chunkX, chunkZ)) return MiniMapTitle.mix(known == null ? UNKNOWN : known, VILLAGE);

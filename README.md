@@ -228,3 +228,7 @@
 - 이 컴퓨터의 서버: `server/start.command` 실행. 접속 주소 `127.0.0.1:25565`.
 - 참가자는 플러그인을 설치하지 않습니다. 서버 운영자만 JAR을 설치합니다.
 - 배포 ZIP에는 월드, 사용자 데이터, EULA 동의, 계정 정보가 포함되지 않습니다.
+
+### 클라이언트 모드팩 검토
+
+[전용 클라이언트 모드와 간편 패키지 배포안](docs/client/CLIENT-MOD-PACKAGING-2026-11-02.md): Paper 유지, Fabric UI 모드, 참가자용 `.mrpack`, 설치·업데이트·호환성 계획입니다. 검증 후 모드 필수 운영으로 결정했습니다. M 키 지도 모드 0.1.0과 서버 0.23.0 연결 기능이 개발되어 있습니다. [진행 기록](docs/client/P0-HANDOFF.md), [호환표](docs/client/COMPATIBILITY.md), [미리보기 설치 안내](distribution/client/INSTALL.md)를 확인하세요. 현재 운영 서버의 참가 방식은 그대로입니다.
