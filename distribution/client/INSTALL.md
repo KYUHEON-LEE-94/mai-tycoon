@@ -1,12 +1,12 @@
 # Mai Tycoon 지도 모드 설치 (미리보기)
 
 이 ZIP은 M 키 지도 시험용입니다. 자동 설치 모드팩(.mrpack)은 아닙니다.
-서버에는 Mai Tycoon 0.23.0 개발본이 필요합니다. 서버 주소는 관리자에게 별도로 받으세요.
+서버에는 Mai Tycoon 0.23.0 이상이 필요합니다. 서버 주소는 관리자에게 별도로 받으세요.
 
 1. Minecraft Java Edition 1.21.11을 준비합니다.
 2. [Fabric 공식 설치 프로그램](https://fabricmc.net/use/installer/)에서 Minecraft **1.21.11**, Loader **0.20.1**을 선택해 설치합니다.
 3. 런처의 Fabric 설치 설정에서 별도의 게임 디렉터리를 지정합니다. 기존 월드와 모드를 섞지 않는 것이 좋습니다.
-4. 그 게임 디렉터리의 `mods` 폴더에 ZIP 안의 `mods/mai-tycoon-client-0.1.0.jar`를 넣습니다.
+4. 그 게임 디렉터리의 `mods` 폴더에 ZIP 안의 `mods/mai-tycoon-client-0.2.0.jar`를 넣습니다.
 5. [Fabric 공식 저장소의 Fabric API 0.141.6+1.21.11](https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.141.6+1.21.11/fabric-api-0.141.6+1.21.11.jar)을 받아 같은 `mods` 폴더에 넣습니다. Fabric Loader와 Fabric API는 서로 다른 파일입니다.
 6. 런처에서 해당 Fabric 프로필로 실행하고 관리자에게 안내받은 서버에 접속합니다.
 

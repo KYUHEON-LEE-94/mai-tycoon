@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "kr.maitycoon.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["ContainerScreenMixin", "ContainerScreenAccessor", "MouseHandlerAccessor"],
+  "injectors": {"defaultRequire": 1}
+}

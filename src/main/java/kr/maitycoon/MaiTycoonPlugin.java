@@ -399,7 +399,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             switch (action) {
                 case "info" -> {
                     Profile profile = store.load(player.getUniqueId());
-                    tell(player, "보유 골드: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개 · 생활 램프: " + profile.lamps() + "개");
+                    tell(player, "보유 골드: " + profile.coins() + " · 즈코인: " + profile.zcoin() + "개 · 생활 램프: " + lamps.carried(player) + "개");
                 }
                 case "price" -> marketMenu.open(player);
                 case "buildshop", "seedshop", "cropshop" -> {
@@ -506,6 +506,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
     }
     void openDex(Player player) { dexMenu.open(player); }
+    void deliverLamps(Player player) throws IOException { lamps.deliver(player); }
+    int carriedLamps(Player player) { return lamps.carried(player); }
     private void give(CommandSender sender, String name, String amount, boolean lamp) {
         var target = getServer().getOfflinePlayerIfCached(name);
         if (target == null) { sender.sendMessage("서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다."); return; }
@@ -514,6 +516,8 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             if (count < 1) throw new NumberFormatException();
             Profile profile = store.load(target.getUniqueId());
             store.save(target.getUniqueId(), lamp ? profile.addLamps(count) : profile.addReplants(count));
+            Player online = target.getPlayer();
+            if (lamp && online != null) guarded(online, () -> lamps.deliver(online));
             sender.sendMessage(name + "에게 " + (lamp ? "생활 램프 " + count + "개" : "자동 심기 " + count + "회") + "를 지급했습니다.");
         } catch (NumberFormatException e) { sender.sendMessage("개수를 확인해 주세요."); }
         catch (IOException e) {

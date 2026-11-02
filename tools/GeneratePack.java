@@ -197,6 +197,14 @@ public class GeneratePack {
                 text("assets/maitycoon/models/item/" + crop.id() + "_" + stage + ".json", "{\"parent\":\"minecraft:block/cross\",\"textures\":{\"cross\":\"maitycoon:item/" + crop.id() + "_" + stage + "\"}}");
             }
         }
+        // The life lamp is a paper item like the crops, drawn with the same lamp as its shop.
+        var lampIcon = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D lampArt = lampIcon.createGraphics();
+        lampArtwork(lampArt, 2, 4, 1);
+        lampArt.dispose();
+        png("assets/maitycoon/textures/item/life_lamp.png", lampIcon);
+        text("assets/maitycoon/models/item/life_lamp.json", flatModel("life_lamp"));
+        items.add(selectCase("life_lamp", "maitycoon:item/life_lamp"));
         text("assets/minecraft/items/paper.json", selector(items.toString(), "minecraft:item/paper"));
         text("assets/minecraft/items/short_grass.json", selector(stages.toString(), "minecraft:item/short_grass"));
     }
@@ -403,7 +411,7 @@ public class GeneratePack {
         centered(g, "×", font(8, false), MUTED, 160.5, 26.5);
         box(g, new Color(0x242322), 12, 37, 32, 30, 0);
         outline(g, EDGE, 12, 37, 32, 30, 0);
-        lampArtwork(g, 15, 39);
+        lampArtwork(g, 15, 39, SCALE);
         left(g, "도구에 특별한 능력을", font(6, false), BODY, 50, 42);
         left(g, "무작위로 부여합니다", font(6, false), BODY, 50, 51);
         left(g, "보유", font(5, false), MUTED, 50, 63);
@@ -414,15 +422,15 @@ public class GeneratePack {
         g.setColor(EDGE);
         g.fillRect(7 * SCALE, 106 * SCALE, 162 * SCALE, SCALE / 2);
         left(g, "잔액", font(5, false), MUTED, 8, 118);
-        wide(g, MenuLayout.SHOP_USE, new Color(0x3A332E), "램프 사용 ›", LINE_GOLD);
+        wide(g, MenuLayout.SHOP_USE, new Color(0x3A332E), "능력 목록 ›", LINE_GOLD);
         g.dispose();
         return image;
     }
     /** Code-drawn brass lamp with a turquoise jewel; no borrowed artwork or vanilla dust icon. */
-    static void lampArtwork(Graphics2D g, int x, int y) {
+    static void lampArtwork(Graphics2D g, int x, int y, int scale) {
         var art = (Graphics2D) g.create();
-        art.translate(x * SCALE, y * SCALE);
-        art.scale(SCALE, SCALE);
+        art.translate(x * scale, y * scale);
+        art.scale(scale, scale);
         art.setColor(new Color(0x181716));
         art.fillOval(2, 22, 25, 3);
         art.setColor(new Color(0x9B6D32));

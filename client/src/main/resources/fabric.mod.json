@@ -6,12 +6,17 @@
   "description": "Mai Tycoon 서버 전용 화면과 단축키",
   "environment": "client",
   "entrypoints": {
-    "client": ["kr.maitycoon.client.MaiTycoonClient"]
+    "client": [
+      "kr.maitycoon.client.MaiTycoonClient"
+    ]
   },
   "depends": {
     "fabricloader": ">=0.20.1",
     "minecraft": "1.21.11",
     "java": ">=21",
     "fabric-api": "*"
-  }
+  },
+  "mixins": [
+    "maitycoon.mixins.json"
+  ]
 }

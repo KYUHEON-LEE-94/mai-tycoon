@@ -64,7 +64,7 @@ final class WalletMenu implements Listener {
         Profile profile = store.load(id);
         inventory.setItem(GOLD, Ui.icon(Material.GOLD_INGOT, Ui.line(money(profile.coins()) + " 골드", NamedTextColor.GOLD), List.of(Ui.line("상품을 사고팔고 송금할 때 쓰는 돈입니다.", NamedTextColor.GRAY))));
         inventory.setItem(ZCOIN, Ui.icon(Material.SUNFLOWER, Ui.line(money(profile.zcoin()) + " 즈코인", NamedTextColor.YELLOW), List.of(Ui.line("도감 보상으로 받습니다. 골드로 바꿀 수 없습니다.", NamedTextColor.GRAY))));
-        inventory.setItem(LAMPS, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 램프 " + money(profile.lamps()) + "개", NamedTextColor.GOLD), List.of()));
+        inventory.setItem(LAMPS, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 램프 " + money(plugin.carriedLamps(player)) + "개", NamedTextColor.GOLD), List.of()));
         inventory.setItem(REPLANTS, Ui.icon(Material.WHEAT_SEEDS, Ui.line("자동 심기 " + money(profile.replants()) + "회", NamedTextColor.GREEN), List.of()));
         int slot = LOG_START;
         for (WalletLog.Line line : log.recent(id, LOG_SIZE)) {

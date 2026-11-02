@@ -5,9 +5,11 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -24,29 +26,25 @@ import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.PlayerExpChangeEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.persistence.PersistentDataType;
 
-/** Applies life lamps to tools and pays out their options. */
+/**
+ * Life lamps are items: picked up in the inventory and put down on a tool, one is spent and the tool gets a random
+ * option. The merchant only sells them and lists the options.
+ */
 final class Lamps implements Listener {
-    private enum Screen { SHOP, USE, OPTIONS }
+    private enum Screen { SHOP, OPTIONS }
     private static final class Holder implements InventoryHolder {
         private final Screen screen;
-        private final int slot;
-        private final LifeLamp.Option previous;
-        private final long readyAt;
-        private boolean used, reopening;
+        private boolean reopening;
         private Inventory inventory;
-        private Holder(Screen screen, int slot, LifeLamp.Option previous, long readyAt) {
-            this.screen = screen;
-            this.slot = slot;
-            this.previous = previous;
-            this.readyAt = readyAt;
-        }
+        private Holder(Screen screen) { this.screen = screen; }
         @Override public Inventory getInventory() { return inventory; }
     }
-    private static final int BULK = 64, OPTIONS_START = 9, OPTIONS_SIZE = 36, OPTIONS_BACK = 45;
-    private static final long RETRY_MILLIS = 400;
+    private static final int BULK = 64, OPTIONS_START = 9, OPTIONS_SIZE = 36, OPTIONS_BACK = 45, STACK = 64;
+    private static final String MODEL = "life_lamp";
     private static final Map<Material, Material> CROPS = Map.of(Material.WHEAT, Material.WHEAT, Material.CARROTS, Material.CARROT, Material.POTATOES, Material.POTATO, Material.BEETROOTS, Material.BEETROOT);
     private static final Map<Material, Material> SEEDS = Map.of(Material.WHEAT, Material.WHEAT_SEEDS, Material.CARROTS, Material.CARROT, Material.POTATOES, Material.POTATO, Material.BEETROOTS, Material.BEETROOT_SEEDS);
     private static final Map<Material, Material> SMELTED = Map.of(Material.RAW_IRON, Material.IRON_INGOT, Material.RAW_GOLD, Material.GOLD_INGOT, Material.RAW_COPPER, Material.COPPER_INGOT, Material.ANCIENT_DEBRIS, Material.NETHERITE_SCRAP);
@@ -54,7 +52,7 @@ final class Lamps implements Listener {
     private final ProfileStore store;
     private final LifeLamp lamp;
     private final long price;
-    private final NamespacedKey key;
+    private final NamespacedKey key, itemKey;
     private final Set<UUID> chaining = new HashSet<>();
     Lamps(MaiTycoonPlugin plugin, ProfileStore store, LifeLamp lamp, long price) {
         this.plugin = plugin;
@@ -62,6 +60,7 @@ final class Lamps implements Listener {
         this.lamp = lamp;
         this.price = price;
         this.key = new NamespacedKey(plugin, "lamp");
+        this.itemKey = new NamespacedKey(plugin, "life_lamp");
     }
     private static LifeLamp.Tool tool(ItemStack item) { return item == null ? null : LifeLamp.Tool.of(item.getType().name()); }
     LifeLamp.Option option(ItemStack item) {
@@ -74,56 +73,77 @@ final class Lamps implements Listener {
         meta.lore(List.of(Ui.line("생활 램프", NamedTextColor.GOLD), Ui.line(option.describe(), NamedTextColor.YELLOW)));
         item.setItemMeta(meta);
     }
-    /** The merchant's shop. Buying needs no tool; using a lamp is a screen of its own. */
-    void open(Player player) throws IOException { show(player, Screen.SHOP, null, 0); }
-    private void show(Player player, Screen screen, LifeLamp.Option previous, long readyAt) throws IOException {
-        Holder holder = new Holder(screen, player.getInventory().getHeldItemSlot(), previous, readyAt);
+    ItemStack lampItem(int amount) {
+        ItemStack item = new ItemStack(Catalog.ITEM_BASE, amount);
+        var meta = item.getItemMeta();
+        meta.displayName(Component.text("생활 램프", NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+        meta.lore(List.of(Ui.line("인벤토리에서 집어 괭이, 곡괭이, 삽, 도끼 위에 놓으면", NamedTextColor.GRAY),
+            Ui.line("1개를 쓰고 무작위 능력을 붙입니다.", NamedTextColor.GRAY), Ui.line("이미 있던 능력은 새 능력으로 바뀝니다.", NamedTextColor.DARK_GRAY)));
+        var model = meta.getCustomModelDataComponent();
+        model.setStrings(List.of(MODEL));
+        meta.setCustomModelDataComponent(model);
+        meta.getPersistentDataContainer().set(itemKey, PersistentDataType.BYTE, (byte) 1);
+        item.setItemMeta(meta);
+        return item;
+    }
+    boolean isLamp(ItemStack item) { return item != null && item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(itemKey, PersistentDataType.BYTE); }
+    int carried(Player player) {
+        int count = 0;
+        for (ItemStack item : player.getInventory().getStorageContents()) if (isLamp(item)) count += item.getAmount();
+        return count;
+    }
+    private int room(Player player) {
+        int free = 0;
+        for (ItemStack slot : player.getInventory().getStorageContents()) {
+            if (slot == null || slot.getType().isAir()) free += STACK;
+            else if (isLamp(slot)) free += Math.max(0, STACK - slot.getAmount());
+        }
+        return free;
+    }
+    /** Hands over lamps the account still holds (older versions, dex rewards, admin gifts) as far as the inventory has room. */
+    void deliver(Player player) throws IOException {
+        var id = player.getUniqueId();
+        Profile profile = store.load(id);
+        int count = (int) Math.min(profile.lamps(), room(player));
+        if (count < 1 || plugin.tradeHeld(player)) return;
+        plugin.transact(player, "lamp-deliver", Integer.toString(count), () -> {
+            store.save(id, profile.takeLamps(count));
+            player.getInventory().addItem(lampItem(count));
+        });
+        plugin.tell(player, "생활 램프 " + count + "개를 인벤토리에 넣었습니다." + (profile.lamps() > count ? " 남은 " + (profile.lamps() - count) + "개는 인벤토리를 비우고 다시 접속하면 받습니다." : ""));
+    }
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> { if (player.isOnline()) plugin.guarded(player, () -> deliver(player)); }, 20L);
+    }
+    void open(Player player) throws IOException { show(player, Screen.SHOP); }
+    private void show(Player player, Screen screen) throws IOException {
+        Holder holder = new Holder(screen);
         Profile profile = store.load(player.getUniqueId());
         boolean drawn = plugin.packDrawn(player);
-        Component title = switch (screen) {
-            case SHOP -> drawn ? shopTitle(profile) : Component.text("램프 상점");
-            case USE -> drawn ? useTitle(player, profile, previous) : Component.text("생활 램프");
-            case OPTIONS -> plugin.menuTitle(player, "가능한 능력");
-        };
+        Component title = screen == Screen.SHOP ? drawn ? shopTitle(player, profile) : Component.text("램프 상점") : plugin.menuTitle(player, "가능한 능력");
         holder.inventory = plugin.getServer().createInventory(holder, Ui.SIZE, title);
         render(holder, player);
         player.openInventory(holder.inventory);
     }
-    private void showLater(Player player, Holder holder, LifeLamp.Option previous, long readyAt) {
+    private void showLater(Player player, Holder holder) {
         if (holder.reopening) return;
         holder.reopening = true;
         plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> {
-            if (player.getOpenInventory().getTopInventory().getHolder() == holder) show(player, holder.screen, previous, readyAt);
+            if (player.getOpenInventory().getTopInventory().getHolder() == holder) show(player, holder.screen);
         }));
     }
     private void showNext(Player player, Screen screen) {
-        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> show(player, screen, null, 0)));
+        plugin.getServer().getScheduler().runTask(plugin, () -> plugin.guarded(player, () -> show(player, screen)));
     }
     private static String money(long value) { return String.format("%,d", value); }
-    private Component shopTitle(Profile profile) {
+    private Component shopTitle(Player player, Profile profile) {
         return new ShopTitle().screen(0xE500)
-            .value(62, 70, money(profile.lamps())).label(62, -1, "개")
+            .value(62, 70, money(carried(player))).label(62, -1, "개")
             .onBlue(true).value(82, 70, money(price)).label(82, -1, "골드").onBlue(false)
             .value(117, 24, money(profile.coins())).label(117, -1, "골드")
             .build();
-    }
-    private void describe(ShopTitle title, int y, LifeLamp.Option option) {
-        title.label(y, 44, "KIND_" + option.kind());
-        if (option.kind() == LifeLamp.Kind.AREA) title.back(40).value(y, -1, option.amount() == 2 ? "+2" : "+4");
-        else if (option.percent() < 100) title.back(40).value(y, -1, option.percent() + "% +" + option.amount());
-        else if (option.kind() == LifeLamp.Kind.TREE) title.back(40).value(y, -1, "+" + option.amount());
-    }
-    private Component useTitle(Player player, Profile profile, LifeLamp.Option previous) {
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        LifeLamp.Option current = option(hand);
-        ShopTitle title = new ShopTitle().screen(0xE700);
-        title.label(42, 30, tool(hand) == null ? "도구 없음" : hand.getType().name());
-        if (current == null) title.label(62, 44, "없음");
-        else describe(title, 62, current);
-        if (previous != null) describe(title, 72, previous);
-        title.value(97, 126, money(profile.lamps())).label(97, -1, "개");
-        if (tool(hand) == null || profile.lamps() < 1) title.dimmed(MenuLayout.slotX(MenuLayout.USE_APPLY.get(0)) - 1, true);
-        return title.build();
     }
     private static Material icon(LifeLamp.Kind kind) {
         return switch (kind) {
@@ -147,43 +167,23 @@ final class Lamps implements Listener {
     private void render(Holder holder, Player player) throws IOException {
         plugin.frame(holder.inventory, player);
         Profile profile = store.load(player.getUniqueId());
-        switch (holder.screen) {
-            case SHOP -> renderShop(holder, player, profile);
-            case USE -> renderUse(holder, player, profile);
-            case OPTIONS -> renderOptions(holder, player);
-        }
+        if (holder.screen == Screen.SHOP) renderShop(holder, player, profile);
+        else renderOptions(holder);
     }
     private void renderShop(Holder holder, Player player, Profile profile) {
         boolean drawn = plugin.packDrawn(player);
-        Ui.button(holder.inventory, List.of(MenuLayout.SHOP_ICON), drawn, Ui.icon(Material.GLOWSTONE_DUST, Ui.line("생활 도구 전용 램프", NamedTextColor.GOLD), List.of(
-            Ui.line("보유 " + money(profile.lamps()) + "개", NamedTextColor.GRAY), Ui.line("괭이, 곡괭이, 삽, 도끼에 무작위 능력을 붙입니다.", NamedTextColor.GRAY))));
+        Ui.button(holder.inventory, List.of(MenuLayout.SHOP_ICON), drawn, Ui.decorate(lampItem(1), Ui.line("생활 도구 전용 램프", NamedTextColor.GOLD), List.of(
+            Ui.line("인벤토리에 " + money(carried(player)) + "개", NamedTextColor.GRAY), Ui.line("인벤토리에서 램프를 집어 도구 위에 놓으면 씁니다.", NamedTextColor.GRAY))));
         Ui.button(holder.inventory, MenuLayout.SHOP_BUY, drawn, Ui.icon(Material.GOLD_INGOT, Ui.line("구매 · " + money(price) + " 골드", NamedTextColor.AQUA), List.of(
             Ui.line("좌클릭 시 1개 구매", NamedTextColor.GRAY),
             Ui.line("쉬프트+좌클릭 시 " + BULK + "개 구매 · " + money(price * BULK) + " 골드", NamedTextColor.GRAY),
             Ui.line("잔액 " + money(profile.coins()) + " 골드", NamedTextColor.YELLOW))));
-        Ui.button(holder.inventory, MenuLayout.SHOP_USE, drawn, Ui.icon(Material.ENCHANTED_BOOK, Ui.line("램프 사용", NamedTextColor.GREEN), List.of(Ui.line("손에 든 도구에 램프를 씁니다.", NamedTextColor.GRAY))));
+        Ui.button(holder.inventory, MenuLayout.SHOP_USE, drawn, Ui.icon(Material.BOOK, Ui.line("능력 목록", NamedTextColor.GREEN), List.of(Ui.line("도구별로 붙을 수 있는 능력을 봅니다.", NamedTextColor.GRAY))));
         Ui.button(holder.inventory, List.of(MenuLayout.SHOP_CLOSE), drawn, Ui.icon(Material.BARRIER, Ui.line("닫기", NamedTextColor.RED), List.of()));
     }
-    private void renderUse(Holder holder, Player player, Profile profile) {
-        boolean drawn = plugin.packDrawn(player);
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        LifeLamp.Tool tool = tool(hand);
-        LifeLamp.Option current = option(hand);
-        if (tool == null) holder.inventory.setItem(MenuLayout.USE_TARGET, Ui.icon(Material.BARRIER, Ui.line("도구를 손에 들고 여세요", NamedTextColor.RED), List.of(Ui.line("괭이, 곡괭이, 삽, 도끼에 쓸 수 있습니다.", NamedTextColor.GRAY))));
-        else holder.inventory.setItem(MenuLayout.USE_TARGET, Ui.decorate(hand.clone(), null, List.of(Ui.line(current == null ? "현재 능력 없음" : "현재: " + current.describe(), NamedTextColor.YELLOW))));
-        List<Component> lore = new ArrayList<>();
-        if (holder.previous != null) lore.add(Ui.line("이전: " + holder.previous.describe(), NamedTextColor.GRAY));
-        if (current != null) lore.add(Ui.line("현재: " + current.describe(), NamedTextColor.YELLOW));
-        lore.add(Ui.line("램프 1개를 씁니다. 보유 " + money(profile.lamps()) + "개", NamedTextColor.GRAY));
-        lore.add(Ui.line(tool == null ? "손에 도구가 없어 쓸 수 없습니다." : profile.lamps() < 1 ? "램프가 없어 쓸 수 없습니다." : "기존 능력은 사라지고 무작위 능력이 붙습니다.", tool != null && profile.lamps() > 0 ? NamedTextColor.GRAY : NamedTextColor.RED));
-        Ui.button(holder.inventory, MenuLayout.USE_APPLY, drawn, Ui.icon(Material.LIME_CONCRETE, Ui.line("1회 적용", NamedTextColor.GREEN), lore));
-        Ui.button(holder.inventory, MenuLayout.USE_LIST, drawn, Ui.icon(Material.BOOK, Ui.line("가능한 능력 보기", NamedTextColor.YELLOW), List.of()));
-        Ui.button(holder.inventory, List.of(MenuLayout.USE_BACK), drawn, Ui.icon(Material.ARROW, Ui.line("뒤로", NamedTextColor.WHITE), List.of()));
-    }
-    private void renderOptions(Holder holder, Player player) {
-        LifeLamp.Tool tool = tool(player.getInventory().getItemInMainHand());
+    private void renderOptions(Holder holder) {
         int slot = OPTIONS_START;
-        for (LifeLamp.Kind kind : lamp.kinds(tool)) {
+        for (LifeLamp.Kind kind : lamp.kinds(null)) {
             if (slot == OPTIONS_START + OPTIONS_SIZE) break;
             holder.inventory.setItem(slot++, Ui.icon(icon(kind), Ui.line(kind.label, NamedTextColor.WHITE), List.of(Ui.line(lamp.range(kind), NamedTextColor.GRAY), Ui.line(kind.tool == null ? "모든 도구 공통" : kind.tool.label + " 전용", NamedTextColor.AQUA))));
         }
@@ -196,34 +196,50 @@ final class Lamps implements Listener {
         Profile profile = store.load(id);
         long cost = Math.multiplyExact(price, amount);
         if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
-        plugin.transact(player, "lamp-buy", amount + " -" + cost, () -> store.save(id, profile.spend(cost).addLamps(amount)));
-        plugin.tell(player, "생활 램프 " + amount + "개를 구매했습니다. 보유 " + (profile.lamps() + amount) + "개");
-        render(holder, player);
-        showLater(player, holder, null, 0);
-    }
-    private void apply(Player player, Holder holder) throws IOException {
-        if (holder.used || System.currentTimeMillis() < holder.readyAt) return;
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        LifeLamp.Tool held = tool(hand);
-        var id = player.getUniqueId();
-        Profile profile = store.load(id);
-        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
-        if (player.getInventory().getHeldItemSlot() != holder.slot || held == null) { plugin.tell(player, "손에 든 도구가 없어 램프를 쓰지 않았습니다."); return; }
-        if (profile.lamps() < 1) { plugin.tell(player, "램프가 없어 쓰지 못했습니다. 램프는 그대로입니다."); return; }
-        holder.used = true;
-        LifeLamp.Option before = option(hand), rolled = lamp.roll(held, ThreadLocalRandom.current());
-        plugin.transact(player, "lamp", rolled.encode(), () -> {
-            store.save(id, profile.useLamp());
-            write(hand, rolled);
+        if (room(player) < amount) { plugin.tell(player, "생활 램프 " + amount + "개를 넣을 인벤토리 공간이 부족합니다."); return; }
+        plugin.transact(player, "lamp-buy", amount + " -" + cost, () -> {
+            store.save(id, profile.spend(cost));
+            player.getInventory().addItem(lampItem(amount));
         });
-        plugin.tell(player, "생활 램프를 적용했습니다. " + rolled.describe());
-        // The result stays on the same screen; trying again takes a separate click on the refreshed window.
+        plugin.tell(player, "생활 램프 " + amount + "개를 구매했습니다. 인벤토리에서 램프를 집어 도구 위에 놓으면 씁니다.");
         render(holder, player);
-        showLater(player, holder, before, System.currentTimeMillis() + RETRY_MILLIS);
+        showLater(player, holder);
+    }
+    /** A lamp on the cursor put down on a tool in the player's own inventory. Anything else keeps the normal click. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onUse(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        ItemStack cursor = event.getCursor(), target = event.getCurrentItem();
+        if (!isLamp(cursor) || tool(target) == null || event.getClickedInventory() != player.getInventory()) return;
+        if (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.RIGHT) return;
+        event.setCancelled(true);
+        InventoryView view = event.getView();
+        Inventory inventory = event.getClickedInventory();
+        int slot = event.getSlot();
+        plugin.guarded(player, () -> apply(player, view, inventory, slot, target.clone(), cursor.clone()));
+    }
+    private void apply(Player player, InventoryView view, Inventory inventory, int slot, ItemStack target, ItemStack cursor) throws IOException {
+        if (!plugin.survival(player)) return;
+        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
+        LifeLamp.Option before = option(target), rolled = lamp.roll(tool(target), ThreadLocalRandom.current());
+        ItemStack tool = target.clone();
+        write(tool, rolled);
+        ItemStack rest = cursor.getAmount() > 1 ? cursor.asQuantity(cursor.getAmount() - 1) : null;
+        plugin.transact(player, "lamp", rolled.encode(), () -> {
+            inventory.setItem(slot, tool);
+            view.setCursor(rest);
+        });
+        plugin.tell(player, "생활 램프를 썼습니다. " + (before == null ? "" : "이전: " + before.describe() + " → ") + "새 능력: " + rolled.describe());
+        player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.8f, 1.2f);
     }
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder() instanceof Holder holder)) return;
+        // The lamp itself may be picked up and used in the player's half of this window.
+        if (event.getClickedInventory() != event.getView().getTopInventory()) {
+            if (event.getClick().isShiftClick() || event.getClick() == ClickType.DOUBLE_CLICK) event.setCancelled(true);
+            return;
+        }
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
         ClickType click = event.getClick();
@@ -233,24 +249,16 @@ final class Lamps implements Listener {
             return;
         }
         if (click != ClickType.LEFT) return;
-        switch (holder.screen) {
-            case SHOP -> {
-                if (MenuLayout.SHOP_USE.contains(slot)) showNext(player, Screen.USE);
-                else if (slot == MenuLayout.SHOP_CLOSE) plugin.getServer().getScheduler().runTask(plugin, () -> player.closeInventory());
-            }
-            case USE -> {
-                if (MenuLayout.USE_APPLY.contains(slot)) plugin.guarded(player, () -> apply(player, holder));
-                else if (MenuLayout.USE_LIST.contains(slot)) showNext(player, Screen.OPTIONS);
-                else if (slot == MenuLayout.USE_BACK) showNext(player, Screen.SHOP);
-            }
-            case OPTIONS -> {
-                if (slot == OPTIONS_BACK) showNext(player, Screen.USE);
-            }
-        }
+        if (holder.screen == Screen.SHOP) {
+            if (MenuLayout.SHOP_USE.contains(slot)) showNext(player, Screen.OPTIONS);
+            else if (slot == MenuLayout.SHOP_CLOSE) plugin.getServer().getScheduler().runTask(plugin, () -> player.closeInventory());
+        } else if (slot == OPTIONS_BACK) showNext(player, Screen.SHOP);
     }
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof Holder) event.setCancelled(true);
+        if (!(event.getView().getTopInventory().getHolder() instanceof Holder)) return;
+        int top = event.getView().getTopInventory().getSize();
+        if (event.getRawSlots().stream().anyMatch(slot -> slot < top)) event.setCancelled(true);
     }
     /** Only a direct, uncancelled harvest of a grown crop pays out. Drops stay in the world like the normal ones. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

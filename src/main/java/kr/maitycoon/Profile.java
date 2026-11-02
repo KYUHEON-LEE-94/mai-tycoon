@@ -22,6 +22,8 @@ public record Profile(long coins, long zcoin, long experience, boolean starterCl
         return new Profile(coins - cost, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant, tractor);
     }
     public Profile usePermit() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, false, lamps, replants, autoPlant, tractor); }
+    /** Lamps kept on the account by older versions move into the inventory as items. */
+    public Profile takeLamps(long count) { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps - count, replants, autoPlant, tractor); }
     public Profile useLamp() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps - 1, replants, autoPlant, tractor); }
     public Profile addLamps(long count) { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, Math.addExact(lamps, count), replants, autoPlant, tractor); }
     public Profile useReplant() { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants - 1, autoPlant, tractor); }

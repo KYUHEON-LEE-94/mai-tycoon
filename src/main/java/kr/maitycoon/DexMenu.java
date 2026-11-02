@@ -103,6 +103,7 @@ final class DexMenu implements Listener {
             store.save(uuid, after);
             plugin.tell(player, Component.text("도감 등록: ").append(DexItems.name(id)).append(Component.text(" (" + after.dex().size() + "/" + dex.total() + ")")));
             announce(player, before, after);
+            if (after.lamps() > before.lamps()) plugin.deliverLamps(player);
         });
     }
     private void announce(Player player, Profile before, Profile after) {

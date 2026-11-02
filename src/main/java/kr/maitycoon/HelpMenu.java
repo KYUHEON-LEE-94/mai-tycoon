@@ -57,7 +57,7 @@ final class HelpMenu implements Listener {
             text("작업자 권한은 아래 내 땅 버튼의 농장 관리에서 정합니다."))));
         inventory.setItem(30, entry(Material.GLOWSTONE_DUST, "생활 램프와 자동 심기", List.of(
             text("램프 상인에게 골드로 램프를 삽니다."),
-            text("도구를 들고 램프 상점의 램프 사용을 누르면 능력이 붙습니다."),
+            text("인벤토리에서 램프를 집어 도구 위에 놓으면 능력이 붙습니다."),
             text("자동 심기는 아래 내 땅 버튼의 농장 관리에서 켭니다."))));
         inventory.setItem(32, entry(Material.CHEST, "상인", List.of(
             text("작물 상인, 씨앗 상인, 램프 상인은 광장 북쪽 상점에 함께 있습니다."),

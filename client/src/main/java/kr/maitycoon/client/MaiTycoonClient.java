@@ -31,6 +31,7 @@ public final class MaiTycoonClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             Link.tick();
             Capture.tick(client);
+            Capture.menuTick(client);
             while (fullMap.consumeClick()) if (client.screen == null && client.player != null) client.setScreen(new MapScreen());
         });
     }
