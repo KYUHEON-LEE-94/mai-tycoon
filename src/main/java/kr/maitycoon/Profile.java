@@ -13,6 +13,8 @@ public record Profile(long coins, long zcoin, long experience, boolean starterCl
         this(coins, 0, experience, starterClaimed, Set.of(), Set.of(), false, 0, 0, false, false);
     }
     public static Profile empty() { return new Profile(0, 0, false); }
+    /** An admin setting balances outright; the record still refuses negatives. */
+    public Profile withMoney(long coins, long zcoin) { return new Profile(coins, zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant, tractor); }
     public Profile sell(long income) {
         if (income <= 0) throw new IllegalArgumentException("Invalid sale");
         return new Profile(Math.addExact(coins, income), zcoin, experience, starterClaimed, dex, dexRewards, landPermit, lamps, replants, autoPlant, tractor);

@@ -11,22 +11,25 @@ import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * The whole map, one cell per chunk, drawn from what the server sends. Colours follow the server's charcoal and gold
+ * The whole map, one cell per 8 blocks (a chunk on a 1.0 server), drawn from what the server sends. Colours follow the server's charcoal and gold
  * menus. The server decides what is shown; this screen only moves and scales it.
  */
 public final class MapScreen extends Screen {
     private static final int CHARCOAL = 0xFF211E1C, HEADER = 0xFF322921, EDGE = 0xFFE9D49C, GOLD = 0xFFF2DDA4, MUTED = 0xFFB8AE9C, UNKNOWN = 0xFF2A2725;
     private static final int ME = 0xFFFFFFFF, OTHER = 0xFFFFE040, MINE = 0x2EE66B, TAKEN = 0xFF4A4A, VILLAGE = 0xF2C230;
-    private static final int[] ZOOMS = {1, 2, 3, 4, 6, 8, 12};
+    /** Pixels per cell. The default shows a 1024-block map at six pixels per 8 blocks. */
+    private static final int[] ZOOMS = {1, 2, 3, 4, 6, 8, 12, 16};
+    private static final int DEFAULT_ZOOM = 4, MARK = 4, SELF_MARK = 5;
     private static final int REFRESH_TICKS = 40, TIMEOUT_TICKS = 100;
     private Wire.MapData map;
-    private int zoom = 3, ticks, waitingFor = -1, waitedTicks;
+    private int zoom = DEFAULT_ZOOM, ticks, waitingFor = -1, waitedTicks;
     private double centerX, centerZ;
     private boolean follow = true;
     private int left, top, right, bottom, mapLeft, mapTop, mapRight, mapBottom;
     public MapScreen() { super(Component.translatable("key.maitycoon.full_map")); }
     @Override protected void init() {
-        int panelWidth = Math.min(width - 24, 460), panelHeight = Math.min(height - 24, 320);
+        // The map takes the whole screen: detail matters more than the world behind it.
+        int panelWidth = width - 12, panelHeight = height - 12;
         left = (width - panelWidth) / 2;
         top = (height - panelHeight) / 2;
         right = left + panelWidth;
@@ -51,13 +54,14 @@ public final class MapScreen extends Screen {
     }
     boolean loaded() { return map != null; }
     private int scale() { return ZOOMS[zoom]; }
+    private double cell() { return map == null ? Wire.LEGACY_CELL : map.cellBlocks(); }
     private void followSelf() {
         if (!follow || map == null) return;
-        centerX = map.selfX() / 16.0;
-        centerZ = map.selfZ() / 16.0;
+        centerX = map.selfX() / cell();
+        centerZ = map.selfZ() / cell();
     }
-    private int screenX(double chunkX) { return (int) Math.floor((mapLeft + mapRight) / 2.0 + (chunkX - centerX) * scale()); }
-    private int screenY(double chunkZ) { return (int) Math.floor((mapTop + mapBottom) / 2.0 + (chunkZ - centerZ) * scale()); }
+    private int screenX(double cellX) { return (int) Math.floor((mapLeft + mapRight) / 2.0 + (cellX - centerX) * scale()); }
+    private int screenY(double cellZ) { return (int) Math.floor((mapTop + mapBottom) / 2.0 + (cellZ - centerZ) * scale()); }
     private static int blend(int color, int tint) { return 0xFF000000 | ((color >> 1) & 0x7F7F7F) + ((tint >> 1) & 0x7F7F7F); }
     private static int cellColor(int color, int overlay) {
         int base = color == Wire.UNKNOWN ? UNKNOWN : 0xFF000000 | color;
@@ -112,11 +116,12 @@ public final class MapScreen extends Screen {
                 if (mouseX >= x && mouseX < x + scale && mouseY >= y && mouseY < y + scale) describe(hover, map.originX() + column, map.originZ() + row, map.colors()[index], map.overlays()[index]);
             }
         }
-        for (Wire.Mark mark : map.players()) drawPlayer(graphics, mark.name(), mark.x(), mark.z(), OTHER, mouseX, mouseY, hover);
-        drawPlayer(graphics, "나", map.selfX(), map.selfZ(), ME, mouseX, mouseY, hover);
+        for (Wire.Mark mark : map.players()) drawPlayer(graphics, mark.name(), mark.x(), mark.z(), OTHER, MARK, mouseX, mouseY, hover);
+        drawPlayer(graphics, "나", map.selfX(), map.selfZ(), ME, SELF_MARK, mouseX, mouseY, hover);
     }
-    private void describe(List<Component> hover, int chunkX, int chunkZ, int color, int overlay) {
-        hover.add(Component.literal("X " + (chunkX << 4) + " ~ " + ((chunkX << 4) + 15) + ", Z " + (chunkZ << 4) + " ~ " + ((chunkZ << 4) + 15)));
+    private void describe(List<Component> hover, int cellX, int cellZ, int color, int overlay) {
+        int size = (int) cell();
+        hover.add(Component.literal("X " + cellX * size + " ~ " + (cellX * size + size - 1) + ", Z " + cellZ * size + " ~ " + (cellZ * size + size - 1)));
         hover.add(Component.literal(switch (overlay) {
             case Wire.MINE -> "내 땅";
             case Wire.TAKEN -> "다른 사람의 땅";
@@ -124,18 +129,25 @@ public final class MapScreen extends Screen {
             default -> color == Wire.UNKNOWN ? "아직 아무도 가지 않은 곳" : "주인 없는 땅";
         }));
     }
-    /** Someone off the visible part stays on its edge, so the direction is never lost. */
-    private void drawPlayer(GuiGraphics graphics, String name, int blockX, int blockZ, int color, int mouseX, int mouseY, List<Component> hover) {
-        int x = screenX(blockX / 16.0), y = screenY(blockZ / 16.0);
-        boolean outside = x < mapLeft + 3 || x > mapRight - 3 || y < mapTop + 3 || y > mapBottom - 3;
-        x = Math.clamp(x, mapLeft + 3, mapRight - 3);
-        y = Math.clamp(y, mapTop + 3, mapBottom - 3);
-        graphics.fill(x - 3, y - 3, x + 3, y + 3, 0xFF16120F);
-        graphics.fill(x - 2, y - 2, x + 2, y + 2, color);
+    /**
+     * A player is a bright square with a dark rim and a ring that pulses, over a name tag with its own dark box, so
+     * it reads on any terrain. Someone off the visible part stays on its edge, so the direction is never lost.
+     */
+    private void drawPlayer(GuiGraphics graphics, String name, int blockX, int blockZ, int color, int size, int mouseX, int mouseY, List<Component> hover) {
+        int x = screenX(blockX / cell()), y = screenY(blockZ / cell());
+        int edge = size + 3;
+        boolean outside = x < mapLeft + edge || x > mapRight - edge || y < mapTop + edge || y > mapBottom - edge;
+        x = Math.clamp(x, mapLeft + edge, mapRight - edge);
+        y = Math.clamp(y, mapTop + edge, mapBottom - edge);
+        int ring = size + 2 + (ticks / 10) % 3;
+        graphics.renderOutline(x - ring, y - ring, ring * 2 + 1, ring * 2 + 1, (color & 0xFFFFFF) | 0x90000000);
+        graphics.fill(x - size - 1, y - size - 1, x + size + 2, y + size + 2, 0xFF16120F);
+        graphics.fill(x - size, y - size, x + size + 1, y + size + 1, color);
         String label = outside && map != null ? name + " " + (int) Math.hypot(blockX - map.selfX(), blockZ - map.selfZ()) + "m" : name;
-        int width = font.width(label), labelX = Math.clamp(x - width / 2, mapLeft + 2, mapRight - 2 - width), labelY = y - 13 < mapTop + 2 ? y + 5 : y - 13;
-        graphics.drawString(font, label, labelX, labelY, color, true);
-        if (Math.abs(mouseX - x) <= 3 && Math.abs(mouseY - y) <= 3) {
+        int width = font.width(label), labelX = Math.clamp(x - width / 2, mapLeft + 2, mapRight - 3 - width), labelY = y - size - 14 < mapTop + 2 ? y + size + 5 : y - size - 14;
+        graphics.fill(labelX - 2, labelY - 2, labelX + width + 2, labelY + font.lineHeight + 1, 0xC016120F);
+        graphics.drawString(font, label, labelX, labelY, color, false);
+        if (Math.abs(mouseX - x) <= size + 1 && Math.abs(mouseY - y) <= size + 1) {
             hover.clear();
             hover.add(Component.literal(name));
             hover.add(Component.literal("X " + blockX + ", Z " + blockZ));
@@ -150,7 +162,7 @@ public final class MapScreen extends Screen {
         swatch(graphics, x, y, 0xFF000000 | VILLAGE, "마을");
         String hint = "드래그 이동 · 휠 확대 · R 내 위치 · " + MaiTycoonClient.keyName() + " 닫기";
         graphics.drawString(font, hint, mapLeft, y + 11, MUTED, false);
-        String scale = "1칸 = 1청크 · x" + scale();
+        String scale = "1칸 = " + (int) cell() + "블록 · x" + scale();
         graphics.drawString(font, scale, mapRight - font.width(scale), y, MUTED, false);
     }
     private int swatch(GuiGraphics graphics, int x, int y, int color, String name) {

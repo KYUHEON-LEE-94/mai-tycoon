@@ -48,7 +48,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private static final int BANNER_SHIFT = 300, OLD_LAND_LIMIT = 9, LAND_LIMIT = 10;
     static final String BUY_PROMPT = "[손 바꾸기]";
     private static final List<String> RETIRED_SEEDS = List.of("STONE_HOE", "IRON_HOE");
-    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop", "give");
+    private static final List<String> ADMIN_ACTIONS = List.of("market", "journal", "buildshop", "seedshop", "cropshop", "give", "money");
     @Override public void onEnable() {
         saveDefaultConfig();
         // Merge new sections and crop entries into old installations without replacing configured values.
@@ -452,12 +452,14 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         boolean records = action.equals("journal");
         boolean giveLamp = (action.equals("lamp") || action.equals("autoplant")) && args.length == 4 && args[1].equalsIgnoreCase("give");
         boolean giveMoney = action.equals("give") && args.length == 4;
-        if (!build && !buildNow && !step && !report && !records && !giveLamp && !giveMoney) return false;
+        boolean money = action.equals("money") && (args.length == 4 || args.length == 5);
+        if (!build && !buildNow && !step && !report && !records && !giveLamp && !giveMoney && !money) return false;
         if (!sender.hasPermission("maitycoon.admin")) { sender.sendMessage("권한이 없습니다."); return true; }
         if (step) { refreshPrices(); sender.sendMessage("시세를 갱신했습니다."); }
         else if (report) marketReport(sender, args);
         else if (giveLamp) give(sender, args[2], args[3], action.equals("lamp"));
         else if (giveMoney) giveMoney(sender, args[1], args[2], args[3]);
+        else if (money) money(sender, args);
         else if (build) sender.sendMessage("월드 스폰 주변 약 110칸 사방의 지형을 평탄화하고 마을을 짓습니다. 되돌릴 수 없으니 월드를 백업한 뒤 /tycoon village build confirm 을 입력하세요.");
         else if (buildNow) {
             sender.sendMessage("마을을 짓습니다.");
@@ -488,6 +490,34 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     }
     private String plainName(String id) { return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(catalog.name(id)); }
     /** /tycoon give <이름> gold|zcoin <수량> */
+    /** /tycoon money set|add|take gold|zcoin <수량> [이름]: an admin's own balance unless a name is given. Logged like any trade. */
+    private void money(CommandSender sender, String[] args) {
+        String usage = "/tycoon money set|add|take gold|zcoin <수량> [이름]";
+        String mode = args[1].toLowerCase(Locale.ROOT), kind = args[2].toLowerCase(Locale.ROOT);
+        if (!List.of("set", "add", "take").contains(mode) || !List.of("gold", "zcoin").contains(kind)) { sender.sendMessage(usage); return; }
+        org.bukkit.OfflinePlayer target = args.length == 5 ? getServer().getOfflinePlayerIfCached(args[4]) : sender instanceof Player self ? self : null;
+        if (target == null) { sender.sendMessage(args.length == 5 ? "서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다." : "콘솔에서는 이름을 적어 주세요. " + usage); return; }
+        long amount;
+        try { amount = Long.parseLong(args[3]); } catch (NumberFormatException e) { sender.sendMessage("수량을 확인해 주세요."); return; }
+        if (amount < 0 || (!mode.equals("set") && amount == 0)) { sender.sendMessage("수량은 0 이상이어야 합니다."); return; }
+        try {
+            Profile before = store.load(target.getUniqueId());
+            boolean gold = kind.equals("gold");
+            long current = gold ? before.coins() : before.zcoin();
+            long next = switch (mode) { case "set" -> amount; case "add" -> Math.addExact(current, amount); default -> Math.max(0, current - amount); };
+            Profile after = gold ? before.withMoney(next, before.zcoin()) : before.withMoney(before.coins(), next);
+            store.save(target.getUniqueId(), after);
+            logWallet(target.getUniqueId(), "admin", before, after);
+            String unit = gold ? " 골드" : " 즈코인";
+            sender.sendMessage((target.getName() == null ? "플레이어" : target.getName()) + "의 " + (gold ? "골드" : "즈코인") + ": " + String.format("%,d", current) + " → " + String.format("%,d", next) + unit);
+            Player online = target.getPlayer();
+            if (online != null && online != sender) tell(online, "관리자가 " + (gold ? "골드" : "즈코인") + "를 " + String.format("%,d", next) + unit + "로 바꿨습니다.");
+        } catch (ArithmeticException e) { sender.sendMessage("너무 큰 수량입니다."); }
+        catch (IOException e) {
+            getLogger().log(Level.SEVERE, "Cannot change money", e);
+            sender.sendMessage("바꾸지 못했습니다.");
+        }
+    }
     private void giveMoney(CommandSender sender, String name, String kind, String amount) {
         var target = getServer().getOfflinePlayerIfCached(name);
         if (target == null) { sender.sendMessage("서버에 접속한 적이 있는 플레이어만 지정할 수 있습니다."); return; }
@@ -594,6 +624,10 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     }
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         String typed = args[args.length - 1].toLowerCase(Locale.ROOT);
+        if (sender.hasPermission("maitycoon.admin") && args[0].equalsIgnoreCase("money")) {
+            List<String> options = args.length == 2 ? List.of("set", "add", "take") : args.length == 3 ? List.of("gold", "zcoin") : List.of();
+            return options.stream().filter(s -> s.startsWith(typed)).toList();
+        }
         if (args.length == 2 && sender.hasPermission("maitycoon.admin")) {
             String next = args[0].equalsIgnoreCase("village") ? "build" : args[0].equalsIgnoreCase("market") ? ("report".startsWith(typed) ? "report" : "next") : args[0].equalsIgnoreCase("journal") ? "resolve" : "";
             return !next.isEmpty() && next.startsWith(typed) ? List.of(next) : List.of();

@@ -39,7 +39,7 @@ final class WalletMenu implements Listener {
     private static final int ADD_START = 19, TAKE_START = 28;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault());
     private static final Map<String, String> TYPES = Map.ofEntries(Map.entry("sell", "작물 판매"), Map.entry("buy", "상점 구매"), Map.entry("lamp-buy", "램프 구매"), Map.entry("land", "땅 구매"),
-        Map.entry("dex", "도감 보상"), Map.entry("replant", "자동 심기 구매"), Map.entry("tractor", "트랙터 구매"), Map.entry("transfer-out", "송금"), Map.entry("transfer-in", "받은 돈"));
+        Map.entry("dex", "도감 보상"), Map.entry("replant", "자동 심기 구매"), Map.entry("tractor", "트랙터 구매"), Map.entry("transfer-out", "송금"), Map.entry("admin", "관리자 조정"), Map.entry("transfer-in", "받은 돈"));
     private final MaiTycoonPlugin plugin;
     private final ProfileStore store;
     private final TransactionJournal journal;

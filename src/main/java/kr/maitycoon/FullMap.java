@@ -22,14 +22,20 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import kr.maitycoon.protocol.Wire;
 
-/** One cell per chunk around the player. Reading an unloaded chunk would load it, so the map shows the colours seen when chunks were last loaded. */
+/**
+ * The terrain record behind both full maps: one colour per 8-block cell, four to a chunk, taken whenever a chunk
+ * loads. Reading an unloaded chunk would load it, so elsewhere the map shows what was seen last.
+ */
 final class FullMap implements Listener {
     private static final class Holder implements InventoryHolder {
         private Inventory inventory;
         @Override public Inventory getInventory() { return inventory; }
     }
     private static final int COLUMNS = MiniMapTitle.FULL_COLUMNS, ROWS = MiniMapTitle.FULL_ROWS, CENTER_COLUMN = COLUMNS / 2 - 1, CENTER_ROW = ROWS / 2 - 1;
-    private static final int UNKNOWN = 0x1A1816, ME = 0xFFFFFF, VILLAGE = 0xF2C230, CHUNK_MIDDLE = 8;
+    private static final int UNKNOWN = 0x1A1816, ME = 0xFFFFFF, VILLAGE = 0xF2C230;
+    /** Cells are 8 blocks: two per chunk on each axis, sampled at each cell's middle. */
+    static final int CELL = 8, CELL_SHIFT = 3, PER_CHUNK = 2;
+    private static final String FORMAT = "cells-8";
     private final MaiTycoonPlugin plugin;
     private final Village village;
     private final Lands lands;
@@ -42,16 +48,26 @@ final class FullMap implements Listener {
         this.lands = lands;
         this.file = file;
         if (!Files.exists(file)) return;
-        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        // Files from before the cell format hold one colour per chunk; it fills all four cells until the chunk loads again.
+        boolean perChunk = lines.isEmpty() || !lines.get(0).equals(FORMAT);
+        for (String line : lines) {
             String[] parts = line.split(",");
-            if (parts.length == 3) colors.put(key(Integer.parseInt(parts[0]), Integer.parseInt(parts[1])), Integer.parseInt(parts[2]));
+            if (parts.length != 3) continue;
+            int x = Integer.parseInt(parts[0]), z = Integer.parseInt(parts[1]), color = Integer.parseInt(parts[2]);
+            if (!perChunk) colors.put(key(x, z), color);
+            else for (int i = 0; i < PER_CHUNK; i++) for (int j = 0; j < PER_CHUNK; j++) colors.put(key(x * PER_CHUNK + i, z * PER_CHUNK + j), color);
         }
+        changed = perChunk;
     }
     private static long key(int chunkX, int chunkZ) { return (long) chunkX << 32 | chunkZ & 0xFFFFFFFFL; }
+    private static int sampleAt(World world, int cellX, int cellZ) { return world.getHighestBlockAt((cellX << CELL_SHIFT) + CELL / 2, (cellZ << CELL_SHIFT) + CELL / 2).getBlockData().getMapColor().asRGB(); }
+    private void sampleCell(World world, int cellX, int cellZ) {
+        Integer color = sampleAt(world, cellX, cellZ);
+        if (!color.equals(colors.put(key(cellX, cellZ), color))) changed = true;
+    }
     private void sample(World world, int chunkX, int chunkZ) {
-        int x = (chunkX << 4) + CHUNK_MIDDLE, z = (chunkZ << 4) + CHUNK_MIDDLE;
-        Integer color = world.getHighestBlockAt(x, z).getBlockData().getMapColor().asRGB();
-        if (!color.equals(colors.put(key(chunkX, chunkZ), color))) changed = true;
+        for (int i = 0; i < PER_CHUNK; i++) for (int j = 0; j < PER_CHUNK; j++) sampleCell(world, chunkX * PER_CHUNK + i, chunkZ * PER_CHUNK + j);
     }
     @EventHandler
     public void onLoad(ChunkLoadEvent event) {
@@ -60,7 +76,8 @@ final class FullMap implements Listener {
     }
     void saveIfChanged() {
         if (!changed) return;
-        List<String> lines = new ArrayList<>(colors.size());
+        List<String> lines = new ArrayList<>(colors.size() + 1);
+        lines.add(FORMAT);
         colors.forEach((key, color) -> lines.add((int) (key >> 32) + "," + (int) (long) key + "," + color));
         try {
             Path temporary = file.resolveSibling(file.getFileName() + ".tmp");
@@ -69,25 +86,29 @@ final class FullMap implements Listener {
             changed = false;
         } catch (IOException e) { plugin.getLogger().log(Level.WARNING, "Cannot save map colours", e); }
     }
-    /** The recorded colour, refreshed when the chunk is loaded now. Only the village world is recorded. */
-    private Integer terrain(World world, int chunkX, int chunkZ) {
+    /** The recorded colour of a cell, refreshed when its chunk is loaded now. Only the village world is recorded. */
+    private Integer terrainCell(World world, int cellX, int cellZ) {
         boolean recorded = world.equals(village.world());
+        int chunkX = Math.floorDiv(cellX, PER_CHUNK), chunkZ = Math.floorDiv(cellZ, PER_CHUNK);
         if (world.isChunkLoaded(chunkX, chunkZ)) {
-            if (!recorded) return world.getHighestBlockAt((chunkX << 4) + CHUNK_MIDDLE, (chunkZ << 4) + CHUNK_MIDDLE).getBlockData().getMapColor().asRGB();
-            sample(world, chunkX, chunkZ);
+            if (!recorded) return sampleAt(world, cellX, cellZ);
+            sampleCell(world, cellX, cellZ);
         }
-        return recorded ? colors.get(key(chunkX, chunkZ)) : null;
+        return recorded ? colors.get(key(cellX, cellZ)) : null;
     }
-    /** What the client mod draws: raw colours and who holds each chunk, so the client decides how to show them. */
-    Wire.MapData data(Player player, int requestId, int half) {
+    /** A chunk's colour for the chest map and 1.0 clients: the cell holding the chunk's middle. */
+    private Integer terrain(World world, int chunkX, int chunkZ) { return terrainCell(world, chunkX * PER_CHUNK + 1, chunkZ * PER_CHUNK + 1); }
+    /** What the client mod draws: raw colours and who holds each cell, so the client decides how to show them. Cells are cellBlocks wide (8 or a whole chunk). */
+    Wire.MapData data(Player player, int requestId, int half, int cellBlocks) {
         World world = player.getWorld();
         Location at = player.getLocation();
-        int side = half * 2, originX = (at.getBlockX() >> 4) - half, originZ = (at.getBlockZ() >> 4) - half;
+        int shift = Integer.numberOfTrailingZeros(cellBlocks), side = half * 2, originX = (at.getBlockX() >> shift) - half, originZ = (at.getBlockZ() >> shift) - half;
         int[] terrain = new int[side * side];
         byte[] overlays = new byte[side * side];
         for (int row = 0; row < side; row++) for (int column = 0; column < side; column++) {
-            int chunkX = originX + column, chunkZ = originZ + row, index = row * side + column;
-            Integer color = terrain(world, chunkX, chunkZ);
+            int cellX = originX + column, cellZ = originZ + row, index = row * side + column;
+            int chunkX = (cellX << shift) >> 4, chunkZ = (cellZ << shift) >> 4;
+            Integer color = cellBlocks == CELL ? terrainCell(world, cellX, cellZ) : terrain(world, chunkX, chunkZ);
             terrain[index] = color == null ? Wire.UNKNOWN : color;
             int owner = lands.ownership(player, chunkX, chunkZ);
             overlays[index] = (byte) (owner != Wire.NONE ? owner : village.overlaps(world, chunkX, chunkZ) ? Wire.VILLAGE : Wire.NONE);
@@ -97,7 +118,7 @@ final class FullMap implements Listener {
             if (players.size() == Wire.MAX_LIST) break;
             players.add(new Wire.Mark(other.getName(), other.getLocation().getBlockX(), other.getLocation().getBlockZ()));
         }
-        return new Wire.MapData(requestId, originX, originZ, side, side, terrain, overlays, at.getBlockX(), at.getBlockZ(), players);
+        return new Wire.MapData(requestId, originX, originZ, side, side, cellBlocks, terrain, overlays, at.getBlockX(), at.getBlockZ(), players);
     }
     private int color(Player player, World world, int chunkX, int chunkZ) {
         Integer known = terrain(world, chunkX, chunkZ);

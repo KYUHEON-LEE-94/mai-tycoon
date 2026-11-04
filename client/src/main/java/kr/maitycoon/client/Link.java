@@ -16,6 +16,7 @@ public final class Link {
     private static final int REGISTER_TICKS = 100;
     private static Status status = Status.UNSUPPORTED;
     private static String message = "";
+    private static int serverMinor = Wire.MINOR;
     private static boolean helloSent;
     private static int ticksSinceJoin, nextRequest;
     private Link() {}
@@ -51,6 +52,7 @@ public final class Link {
         try { ack = Wire.helloAck(bytes); }
         catch (IllegalArgumentException e) { LOG.warn("Malformed hello_ack", e); return; }
         boolean ready = ack.status() == Wire.OK && ack.major() == Wire.MAJOR && ack.features().contains(Wire.FULL_MAP);
+        serverMinor = ack.minor();
         status = ready ? Status.READY : Status.OUTDATED;
         message = ack.message();
         LOG.info("Handshake {} (server protocol {}.{})", ready ? "ready" : "refused", ack.major(), ack.minor());
@@ -65,7 +67,7 @@ public final class Link {
     }
     static void mapArrived(byte[] bytes) {
         Wire.MapData map;
-        try { map = Wire.map(bytes); }
+        try { map = Wire.map(bytes, serverMinor < 1); }
         catch (IllegalArgumentException e) { LOG.warn("Malformed map", e); return; }
         if (Minecraft.getInstance().screen instanceof MapScreen screen) screen.accept(map);
     }

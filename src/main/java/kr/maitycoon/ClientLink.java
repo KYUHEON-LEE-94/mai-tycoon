@@ -27,7 +27,8 @@ import org.bukkit.plugin.messaging.PluginMessageListener;
 final class ClientLink implements PluginMessageListener, Listener {
     private record Session(int major, int minor, String modVersion, boolean fullMap) {}
     private static final long MAP_INTERVAL = 400;
-    private static final int MAP_HALF = 48;
+    /** 1.1 clients get 8-block cells over 1024 blocks; 1.0 clients keep chunk cells over 1536 blocks. */
+    private static final int MAP_HALF = 48, FINE_HALF = 64, FINE_CELL = 8;
     private final MaiTycoonPlugin plugin;
     private final FullMap map;
     private final boolean required;
@@ -80,7 +81,7 @@ final class ClientLink implements PluginMessageListener, Listener {
         }
         sessions.put(id, new Session(hello.major(), hello.minor(), hello.modVersion(), hello.features().contains(Wire.FULL_MAP)));
         waiting.remove(id);
-        send(player, Wire.HELLO_ACK, Wire.encode(new Wire.HelloAck(Wire.OK, Wire.MAJOR, Wire.MINOR, "", hello.features().contains(Wire.FULL_MAP) ? List.of(Wire.FULL_MAP) : List.of())));
+        send(player, Wire.HELLO_ACK, Wire.encode(new Wire.HelloAck(Wire.OK, Wire.MAJOR, Math.min(Wire.MINOR, hello.minor()), "", hello.features().contains(Wire.FULL_MAP) ? List.of(Wire.FULL_MAP) : List.of())));
         plugin.getLogger().info(player.getName() + " joined with client " + hello.modVersion());
     }
     private void map(Player player, Wire.MapRequest request) {
@@ -89,7 +90,8 @@ final class ClientLink implements PluginMessageListener, Listener {
         long now = System.currentTimeMillis();
         if (now - lastMap.getOrDefault(player.getUniqueId(), 0L) < MAP_INTERVAL) return;
         lastMap.put(player.getUniqueId(), now);
-        send(player, Wire.MAP, Wire.encode(map.data(player, request.requestId(), MAP_HALF)));
+        boolean legacy = sessions.get(player.getUniqueId()).minor() < 1;
+        send(player, Wire.MAP, Wire.encode(legacy ? map.data(player, request.requestId(), MAP_HALF, Wire.LEGACY_CELL) : map.data(player, request.requestId(), FINE_HALF, FINE_CELL), legacy));
     }
     private void send(Player player, String channel, byte[] bytes) {
         if (player.getListeningPluginChannels().contains(channel)) player.sendPluginMessage(plugin, channel, bytes);

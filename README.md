@@ -40,6 +40,7 @@
 | `/tycoon land` | 땅 지도와 농장 관리 열기 |
 | `/tycoon land member add\|remove <이름>` | 내 땅의 작업자 관리 |
 | `/tycoon give <이름> gold\|zcoin <수량>` | (관리자, 콘솔 가능) 골드, 즈코인 지급 |
+| `/tycoon money set\|add\|take gold\|zcoin <수량> [이름]` | (관리자) 잔액을 정하거나 더하고 빼기. 이름을 생략하면 자기 자신. 지갑 기록에 `관리자 조정`으로 남음 |
 | `/tycoon village build confirm` | (관리자, 콘솔 가능) 마을 생성 또는 재건축. 지형이 바뀌고 농장 작물이 초기화됩니다 |
 | `/tycoon journal` | (관리자, 콘솔 가능) 중단된 거래 기록 보기, `resolve <번호>`로 처리 |
 | `/tycoon buildshop` / `seedshop` / `cropshop` | 관리자 전용 상점 열기. 일반 유저는 NPC를 우클릭합니다 |
