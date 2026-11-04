@@ -29,6 +29,7 @@ import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.persistence.PersistentDataType;
+import kr.maitycoon.protocol.Wire;
 
 /**
  * Life lamps are items: picked up in the inventory and put down on a tool, one is spent and the tool gets a random
@@ -189,19 +190,34 @@ final class Lamps implements Listener {
         }
         holder.inventory.setItem(OPTIONS_BACK, Ui.icon(Material.ARROW, Ui.line("뒤로", NamedTextColor.WHITE), List.of()));
     }
-    private void buy(Player player, Holder holder, int amount) throws IOException {
-        if (!plugin.survival(player)) return;
-        if (plugin.tradeHeld(player)) { plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요."); return; }
+    static final String ITEM_ID = "LIFE_LAMP";
+    /** The purchase itself, shared by the chest screen and the mod. */
+    Shop.Outcome tryBuy(Player player, int amount) throws IOException {
+        if (player.getGameMode() != GameMode.SURVIVAL && !player.hasPermission("maitycoon.admin")) return Shop.Outcome.refused("농사 보급과 거래는 서바이벌 모드에서 사용할 수 있습니다.");
+        if (plugin.tradeHeld(player)) return Shop.Outcome.refused("거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요.");
+        if (amount < 1 || amount > STACK) return Shop.Outcome.refused("한 번에 1~" + STACK + "개까지 살 수 있습니다.");
         var id = player.getUniqueId();
         Profile profile = store.load(id);
         long cost = Math.multiplyExact(price, amount);
-        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
-        if (room(player) < amount) { plugin.tell(player, "생활 램프 " + amount + "개를 넣을 인벤토리 공간이 부족합니다."); return; }
+        if (profile.coins() < cost) return Shop.Outcome.refused("골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins()));
+        if (room(player) < amount) return Shop.Outcome.refused("생활 램프 " + amount + "개를 넣을 인벤토리 공간이 부족합니다.");
         plugin.transact(player, "lamp-buy", amount + " -" + cost, () -> {
             store.save(id, profile.spend(cost));
             player.getInventory().addItem(lampItem(amount));
         });
         plugin.tell(player, "생활 램프 " + amount + "개를 구매했습니다. 인벤토리에서 램프를 집어 도구 위에 놓으면 씁니다.");
+        return Shop.Outcome.OK;
+    }
+    /** The lamp shop for the mod: one product and the list of what a lamp can do. */
+    Wire.ShopData snapshot(Player player, int reason) throws IOException {
+        List<String> notes = new ArrayList<>(List.of("인벤토리에서 램프를 집어 괭이, 곡괭이, 삽, 도끼 위에 놓으면 1개를 쓰고 무작위 능력이 붙습니다.", "이미 있던 능력은 새 능력으로 바뀝니다.", ""));
+        for (LifeLamp.Kind kind : lamp.kinds(null)) notes.add((kind.tool == null ? "공통" : kind.tool.label) + " · " + kind.label + ": " + lamp.range(kind));
+        var item = new Wire.ShopItem(ITEM_ID, "생활 램프", "램프", Catalog.ITEM_BASE.getKey().toString(), MODEL, price, 0, 0, 0, carried(player), STACK, List.copyOf(notes.subList(0, Math.min(notes.size(), Wire.MAX_LIST))));
+        return new Wire.ShopData(reason, Wire.SHOP_LAMP, "램프 상점", store.load(player.getUniqueId()).coins(), 0, -1, List.of("램프"), List.of(item));
+    }
+    private void buy(Player player, Holder holder, int amount) throws IOException {
+        Shop.Outcome outcome = tryBuy(player, amount);
+        if (!outcome.ok()) { plugin.tell(player, outcome.message()); return; }
         render(holder, player);
         showLater(player, holder);
     }

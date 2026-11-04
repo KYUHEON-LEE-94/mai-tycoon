@@ -25,6 +25,8 @@ public final class MaiTycoonClient implements ClientModInitializer {
         fullMap = KeyBindingHelper.registerKeyBinding(new KeyMapping("key.maitycoon.full_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, CATEGORY));
         ClientPlayNetworking.registerGlobalReceiver(Packet.HELLO_ACK, (packet, context) -> Link.acknowledged(packet.data()));
         ClientPlayNetworking.registerGlobalReceiver(Packet.MAP, (packet, context) -> Link.mapArrived(packet.data()));
+        ClientPlayNetworking.registerGlobalReceiver(Packet.SHOP, (packet, context) -> Link.shopArrived(packet.data()));
+        ClientPlayNetworking.registerGlobalReceiver(Packet.SHOP_RESULT, (packet, context) -> Link.shopResult(packet.data()));
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> Link.joined());
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> Link.left());
         C2SPlayChannelEvents.REGISTER.register((handler, sender, client, channels) -> Link.channelsRegistered());

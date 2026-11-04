@@ -45,7 +45,7 @@ public final class Link {
         // Lets a mismatched version be tried without building an old client.
         int major = Integer.parseInt(System.getenv().getOrDefault("MAITYCOON_PROTOCOL_MAJOR", Integer.toString(Wire.MAJOR)));
         String version = FabricLoader.getInstance().getModContainer("maitycoon").map(mod -> mod.getMetadata().getVersion().getFriendlyString()).orElse("dev");
-        ClientPlayNetworking.send(new Packet(Packet.HELLO, Wire.encode(new Wire.Hello(major, Wire.MINOR, version, List.of(Wire.FULL_MAP)))));
+        ClientPlayNetworking.send(new Packet(Packet.HELLO, Wire.encode(new Wire.Hello(major, Wire.MINOR, version, List.of(Wire.FULL_MAP, Wire.SHOP_FEATURE)))));
     }
     static void acknowledged(byte[] bytes) {
         Wire.HelloAck ack;
@@ -64,6 +64,26 @@ public final class Link {
         int id = ++nextRequest;
         ClientPlayNetworking.send(new Packet(Packet.MAP_REQUEST, Wire.encode(new Wire.MapRequest(id))));
         return id;
+    }
+    static int requestShop(int kind, int action, String item, int amount, int revision) {
+        if (status != Status.READY) return -1;
+        int id = ++nextRequest;
+        ClientPlayNetworking.send(new Packet(Packet.SHOP_REQUEST, Wire.encode(new Wire.ShopRequest(id, kind, action, item, amount, revision))));
+        return id;
+    }
+    static void shopArrived(byte[] bytes) {
+        Wire.ShopData shop;
+        try { shop = Wire.shop(bytes); }
+        catch (IllegalArgumentException e) { LOG.warn("Malformed shop", e); return; }
+        Minecraft client = Minecraft.getInstance();
+        if (client.screen instanceof ShopScreen screen && screen.kind() == shop.kind()) screen.update(shop);
+        else if (shop.reason() == Wire.OPEN) client.setScreen(new ShopScreen(shop));
+    }
+    static void shopResult(byte[] bytes) {
+        Wire.ShopResult result;
+        try { result = Wire.shopResult(bytes); }
+        catch (IllegalArgumentException e) { LOG.warn("Malformed shop_result", e); return; }
+        if (Minecraft.getInstance().screen instanceof ShopScreen screen) screen.result(result);
     }
     static void mapArrived(byte[] bytes) {
         Wire.MapData map;

@@ -34,6 +34,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
     private FarmStatusMenu farmStatus;
     private Lamps lamps;
     private MiniMap miniMap;
+    private ClientLink clientLink;
     private FullMap fullMap;
     private HelpMenu helpMenu;
     private Tractors tractors;
@@ -91,12 +92,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             long reportDays = getConfig().getLong("land.report-days");
             if (reportDays < 1) throw new IOException("Invalid land settings");
             lands = new Lands(this, store, village, landPrice, landStep, landMax, reportDays * 86_400_000L, getConfig().getBoolean("land.theft"));
-            npcActions.put("market", player -> shop.open(player, Shop.Kind.SELL));
+            npcActions.put("market", player -> openShop(player, Shop.Kind.SELL));
             npcActions.put("guide", player -> helpMenu.open(player));
-            npcActions.put("lamp", player -> guarded(player, () -> lamps.open(player)));
-            npcActions.put("building", player -> shop.open(player, Shop.Kind.BUILD));
-            npcActions.put("furniture", player -> shop.open(player, Shop.Kind.FURNITURE));
-            npcActions.put("seeds", player -> shop.open(player, Shop.Kind.BUY));
+            npcActions.put("lamp", player -> openLampShop(player));
+            npcActions.put("building", player -> openShop(player, Shop.Kind.BUILD));
+            npcActions.put("furniture", player -> openShop(player, Shop.Kind.FURNITURE));
+            npcActions.put("seeds", player -> openShop(player, Shop.Kind.BUY));
             npcActions.put("dex", dexMenu::open);
             Objects.requireNonNull(getCommand("tycoon")).setExecutor(this);
             Objects.requireNonNull(getCommand("도움말")).setExecutor((sender, command, label, args) -> {
@@ -133,7 +134,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
             getServer().getPluginManager().registerEvents(fullMap, this);
             getServer().getScheduler().runTaskTimer(this, () -> fullMap.saveIfChanged(), 6000L, 6000L);
             installDatapack();
-            ClientLink clientLink = new ClientLink(this, fullMap, getConfig().getBoolean("client.required"), Math.max(1, getConfig().getInt("client.wait-seconds")));
+            clientLink = new ClientLink(this, fullMap, shop, lamps, getConfig().getBoolean("client.required"), Math.max(1, getConfig().getInt("client.wait-seconds")));
             clientLink.register();
             getServer().getPluginManager().registerEvents(clientLink, this);
             long plantPrice = getConfig().getLong("auto-plant.zcoin-price"), plantUses = getConfig().getLong("auto-plant.uses");
@@ -380,6 +381,7 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         try { saveMarket(); }
         catch (IOException e) { getLogger().log(Level.SEVERE, "Cannot save market.yml", e); }
         shop.refreshOpen();
+        if (clientLink != null) clientLink.refreshShops();
         marketMenu.refreshOpen();
         Market.Move up = moves.stream().max(Comparator.comparingDouble(m -> (double) m.change() / market.base(m.id()))).orElseThrow();
         Market.Move down = moves.stream().min(Comparator.comparingDouble(m -> (double) m.change() / market.base(m.id()))).orElseThrow();
@@ -404,12 +406,12 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
                 case "price" -> marketMenu.open(player);
                 case "buildshop", "seedshop", "cropshop" -> {
                     if (!player.hasPermission("maitycoon.admin")) tell(player, "상점은 마을의 상인을 우클릭해 이용해 주세요.");
-                    else shop.open(player, action.equals("buildshop") ? Shop.Kind.BUILD : action.equals("seedshop") ? Shop.Kind.BUY : Shop.Kind.SELL);
+                    else openShop(player, action.equals("buildshop") ? Shop.Kind.BUILD : action.equals("seedshop") ? Shop.Kind.BUY : Shop.Kind.SELL);
                 }
                 case "starter" -> starter(player);
                 case "dex" -> dexMenu.open(player);
                 case "help" -> helpMenu.open(player);
-                case "lamp" -> lamps.open(player);
+                case "lamp" -> openLampShop(player);
                 case "wallet" -> wallet.open(player);
                 case "autoplant" -> autoPlanting.open(player);
                 case "map" -> fullMap.open(player);
@@ -536,6 +538,13 @@ public final class MaiTycoonPlugin extends JavaPlugin implements TabExecutor {
         }
     }
     void openDex(Player player) { dexMenu.open(player); }
+    /** The mod's screen when the client has it, the chest screen otherwise. */
+    void openShop(Player player, Shop.Kind kind) {
+        guarded(player, () -> { if (clientLink == null || !clientLink.openShop(player, Shop.wireOf(kind))) shop.open(player, kind); });
+    }
+    void openLampShop(Player player) {
+        guarded(player, () -> { if (clientLink == null || !clientLink.openShop(player, kr.maitycoon.protocol.Wire.SHOP_LAMP)) lamps.open(player); });
+    }
     void deliverLamps(Player player) throws IOException { lamps.deliver(player); }
     int carriedLamps(Player player) { return lamps.carried(player); }
     private void give(CommandSender sender, String name, String amount, boolean lamp) {

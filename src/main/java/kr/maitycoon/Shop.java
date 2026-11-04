@@ -10,6 +10,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.*;
+import kr.maitycoon.protocol.Wire;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /**
  * NPC shop screens. Slots follow ShopLayout: players with the resource pack see the drawn screen, everyone else the same
@@ -22,6 +24,12 @@ final class Shop implements Listener {
         Kind(String title) { this.title = title; }
     }
     record Listing(long price, String category) {}
+    /** How a trade ended, for whichever screen asked. A null message means it went through. */
+    record Outcome(int status, String message) {
+        static final Outcome OK = new Outcome(Wire.RESULT_OK, "");
+        static Outcome refused(String message) { return new Outcome(Wire.RESULT_REFUSED, message); }
+        boolean ok() { return status == Wire.RESULT_OK; }
+    }
     /** What a sale would do right now; two quotes are equal only if prices and contents both match. */
     private record Quote(long revision, Map<String, Long> counts, long total) {
         long count() { return counts.values().stream().mapToLong(Long::longValue).sum(); }
@@ -250,17 +258,90 @@ final class Shop implements Listener {
         }
     }
     private static String money(long value) { return String.format("%,d", value); }
+    private static String plain(Component text) { return PlainTextComponentSerializer.plainText().serialize(text); }
+    private String blocked(Player player) {
+        if (player.getGameMode() != org.bukkit.GameMode.SURVIVAL && !player.hasPermission("maitycoon.admin")) return "농사 보급과 거래는 서바이벌 모드에서 사용할 수 있습니다.";
+        if (plugin.tradeHeld(player)) return "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요.";
+        return null;
+    }
     private boolean mayTrade(Player player) {
-        if (!plugin.survival(player)) return false;
-        if (!plugin.tradeHeld(player)) return true;
-        plugin.tell(player, "거래를 완료하지 못했습니다. 아이템과 잔액을 확인해 주세요.");
-        return false;
+        String why = blocked(player);
+        if (why != null) plugin.tell(player, why);
+        return why == null;
+    }
+    /** Sells up to limit of one crop at today's prices. The chest screen and the mod both come through here. */
+    Outcome trySell(Player player, String item, long limit) throws IOException {
+        String why = blocked(player);
+        if (why != null) return Outcome.refused(why);
+        if (item == null || !market.has(item)) return Outcome.refused("팔 수 없는 품목입니다.");
+        Quote quote = quote(player, item, limit);
+        if (quote.count() == 0) return Outcome.refused("판매할 일반 작물이 없습니다.");
+        execute(player, quote);
+        return Outcome.OK;
+    }
+    /** Sells every listed crop, but only at the prices the player was shown. */
+    Outcome trySellAll(Player player, int shownRevision) throws IOException {
+        String why = blocked(player);
+        if (why != null) return Outcome.refused(why);
+        if ((int) market.revision() != shownRevision) return new Outcome(Wire.RESULT_CHANGED, "시세가 바뀌어 합계를 다시 계산했습니다. 금액을 확인해 주세요.");
+        Quote quote = quote(player, null, Long.MAX_VALUE);
+        if (quote.count() == 0) return Outcome.refused("판매할 일반 작물이 없습니다.");
+        execute(player, quote);
+        return Outcome.OK;
+    }
+    Outcome tryBuy(Player player, Kind kind, String item, int amount) throws IOException {
+        String why = blocked(player);
+        if (why != null) return Outcome.refused(why);
+        if (kind == Kind.SELL || item == null || !stock(kind).containsKey(item)) return Outcome.refused("이 상점에서 팔지 않는 품목입니다.");
+        if (amount < 1 || amount > catalog.maxStack(item)) return Outcome.refused("한 번에 1~" + catalog.maxStack(item) + "개까지 살 수 있습니다.");
+        long cost = Math.multiplyExact(stock(kind).get(item).price(), amount);
+        var id = player.getUniqueId();
+        Profile profile = store.load(id);
+        if (profile.coins() < cost) return Outcome.refused("골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins()));
+        if (freeSpace(player, item) < amount) return Outcome.refused(plain(catalog.name(item)) + " " + amount + "개를 넣을 공간이 부족합니다.");
+        plugin.transact(player, "buy", item + " x" + amount + " -" + cost, () -> {
+            store.save(id, profile.spend(cost));
+            player.getInventory().addItem(catalog.item(item, amount));
+        });
+        plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 구매했습니다. -" + money(cost) + " 골드 · 잔액 " + money(profile.coins() - cost) + " 골드")));
+        return Outcome.OK;
+    }
+    static Kind kindOf(int wire) {
+        return switch (wire) { case Wire.SHOP_SELL -> Kind.SELL; case Wire.SHOP_BUY -> Kind.BUY; case Wire.SHOP_BUILD -> Kind.BUILD; case Wire.SHOP_FURNITURE -> Kind.FURNITURE; default -> null; };
+    }
+    static int wireOf(Kind kind) {
+        return switch (kind) { case SELL -> Wire.SHOP_SELL; case BUY -> Wire.SHOP_BUY; case BUILD -> Wire.SHOP_BUILD; case FURNITURE -> Wire.SHOP_FURNITURE; };
+    }
+    /** Everything the mod's screen shows. Prices and counts are read fresh each time; nothing here is cached. */
+    Wire.ShopData snapshot(Player player, Kind kind, int reason) throws IOException {
+        List<Wire.ShopItem> items = new ArrayList<>();
+        long seconds = plugin.secondsToNextMarket();
+        for (String item : kind == Kind.SELL ? crops.keySet() : stock(kind).keySet()) {
+            List<String> notes = new ArrayList<>();
+            long price, change = 0, floor = 0, ceiling = 0;
+            if (kind == Kind.SELL) {
+                price = market.price(item);
+                change = market.change(item);
+                floor = market.floor(item);
+                ceiling = market.ceiling(item);
+                notes.add("시세 " + graph(market, item));
+                for (Component line : MarketMenu.supply(market, item, seconds)) notes.add(plain(line));
+            } else {
+                price = stock(kind).get(item).price();
+                Catalog.Crop crop = catalog.bySeed(item);
+                if (crop != null) {
+                    notes.add("다 자라는 데 약 " + crop.growMillis() / 60_000 + "분 · 수확 " + crop.minYield() + "~" + crop.maxYield() + "개");
+                    notes.add("지금 판매가 " + market.price(crop.id()) + " 골드");
+                }
+            }
+            items.add(new Wire.ShopItem(item, catalog.customName(item), category(kind, item), catalog.materialKey(item), catalog.model(item), price, change, floor, ceiling,
+                (int) Math.min(Integer.MAX_VALUE, catalog.count(player, item)), catalog.maxStack(item), notes));
+        }
+        return new Wire.ShopData(reason, wireOf(kind), kind.title, store.load(player.getUniqueId()).coins(), (int) market.revision(), kind == Kind.SELL ? (int) seconds : -1, categories(kind), items);
     }
     private void sellNow(Player player, String item, long limit) throws IOException {
-        if (!mayTrade(player)) return;
-        Quote quote = quote(player, item, limit);
-        if (quote.count() == 0) plugin.tell(player, "판매할 일반 작물이 없습니다.");
-        else execute(player, quote);
+        Outcome outcome = trySell(player, item, limit);
+        if (!outcome.ok()) plugin.tell(player, outcome.message());
     }
     private void openConfirm(Holder shop, Player player, String only) throws IOException {
         if (!mayTrade(player)) return;
@@ -313,20 +394,8 @@ final class Shop implements Listener {
         return false;
     }
     private void buy(Player player, Kind kind, String item, int amount) throws IOException {
-        if (!mayTrade(player)) return;
-        long cost = Math.multiplyExact(stock(kind).get(item).price(), amount);
-        var id = player.getUniqueId();
-        Profile profile = store.load(id);
-        if (profile.coins() < cost) { plugin.tell(player, "골드가 부족합니다. 필요 " + money(cost) + " / 보유 " + money(profile.coins())); return; }
-        if (freeSpace(player, item) < amount) {
-            plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 넣을 공간이 부족합니다.")));
-            return;
-        }
-        plugin.transact(player, "buy", item + " x" + amount + " -" + cost, () -> {
-            store.save(id, profile.spend(cost));
-            player.getInventory().addItem(catalog.item(item, amount));
-        });
-        plugin.tell(player, catalog.name(item).append(Component.text(" " + amount + "개를 구매했습니다. -" + money(cost) + " 골드 · 잔액 " + money(profile.coins() - cost) + " 골드")));
+        Outcome outcome = tryBuy(player, kind, item, amount);
+        if (!outcome.ok()) plugin.tell(player, outcome.message());
     }
     private int freeSpace(Player player, String item) {
         int free = 0, stack = catalog.maxStack(item);

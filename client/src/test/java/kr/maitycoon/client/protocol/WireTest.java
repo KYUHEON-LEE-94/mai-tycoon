@@ -14,7 +14,7 @@ class WireTest {
     }
     @Test void hello() throws Exception {
         var hello = Wire.hello(vector("hello"));
-        assertEquals(new Wire.Hello(1, 1, "0.3.0", List.of("full_map")), hello);
+        assertEquals(new Wire.Hello(1, 2, "0.4.0", List.of("full_map", "shop")), hello);
         assertArrayEquals(vector("hello"), Wire.encode(hello));
     }
     @Test void helloAck() throws Exception {
@@ -44,6 +44,25 @@ class WireTest {
         assertArrayEquals(vector("map_v1_0"), Wire.encode(old, true));
         assertThrows(IllegalArgumentException.class, () -> Wire.map(vector("map_v1_0")));
         assertThrows(IllegalArgumentException.class, () -> Wire.encode(Wire.map(vector("map")), true));
+    }
+    @Test void shopMessages() throws Exception {
+        var shop = Wire.shop(vector("shop"));
+        assertEquals(Wire.OPEN, shop.reason());
+        assertEquals(Wire.SHOP_SELL, shop.kind());
+        assertEquals("농산물 상점", shop.title());
+        assertEquals(5_000_000_000L, shop.coins());
+        assertEquals(List.of("전체", "곡물"), shop.tabs());
+        assertEquals(2, shop.items().size());
+        var wheat = shop.items().get(0);
+        assertEquals(new Wire.ShopItem("WHEAT", "밀", "곡물", "minecraft:wheat", "", 55, -5, 30, 90, 12, 64, List.of("시세 ▁▃▇")), wheat);
+        assertEquals("tomato", shop.items().get(1).model());
+        assertArrayEquals(vector("shop"), Wire.encode(shop));
+        var request = Wire.shopRequest(vector("shop_request"));
+        assertEquals(new Wire.ShopRequest(9, Wire.SHOP_BUY, Wire.ACT_BUY, "WHEAT_SEEDS", 16, 3), request);
+        assertArrayEquals(vector("shop_request"), Wire.encode(request));
+        var result = Wire.shopResult(vector("shop_result"));
+        assertEquals(new Wire.ShopResult(9, Wire.RESULT_CHANGED, "시세가 바뀌었습니다"), result);
+        assertArrayEquals(vector("shop_result"), Wire.encode(result));
     }
     @Test void brokenMessagesAreRefused() throws Exception {
         byte[] map = vector("map");

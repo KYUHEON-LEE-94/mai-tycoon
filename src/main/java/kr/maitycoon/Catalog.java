@@ -62,6 +62,11 @@ final class Catalog {
         return id != null && custom(id) ? id : null;
     }
     Component name(String id) { return custom(id) ? Component.text(names.get(id)) : Component.translatable(Material.valueOf(id)); }
+    /** What the client mod needs to draw the item: the item key and, for custom crops, the model string. */
+    String materialKey(String id) { return (custom(id) ? ITEM_BASE : Material.valueOf(id)).getKey().toString(); }
+    String model(String id) { return custom(id) ? modelOf(id) : ""; }
+    /** The shown name of a custom item; vanilla items name themselves on the client. */
+    String customName(String id) { return custom(id) ? names.get(id) : ""; }
     int maxStack(String id) { return custom(id) ? ITEM_BASE.getMaxStackSize() : Material.valueOf(id).getMaxStackSize(); }
     long count(Player player, String id) {
         long count = 0;

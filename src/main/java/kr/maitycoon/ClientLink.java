@@ -1,5 +1,6 @@
 package kr.maitycoon;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.logging.Level;
 import kr.maitycoon.protocol.Wire;
@@ -25,12 +26,16 @@ import org.bukkit.plugin.messaging.PluginMessageListener;
  * player still until it answers. A handshake proves nothing about the client, so every request is still checked here.
  */
 final class ClientLink implements PluginMessageListener, Listener {
-    private record Session(int major, int minor, String modVersion, boolean fullMap) {}
+    private record Session(int major, int minor, String modVersion, boolean fullMap, boolean shop) {}
     private static final long MAP_INTERVAL = 400;
     /** 1.1 clients get 8-block cells over 1024 blocks; 1.0 clients keep chunk cells over 1536 blocks. */
     private static final int MAP_HALF = 48, FINE_HALF = 64, FINE_CELL = 8;
     private final MaiTycoonPlugin plugin;
     private final FullMap map;
+    private final Shop shop;
+    private final Lamps lamps;
+    /** Which mod shop each player has open; requests for any other shop are refused. */
+    private final Map<UUID, Integer> openShops = new HashMap<>();
     private final boolean required;
     private final int waitSeconds;
     private final Map<UUID, Session> sessions = new HashMap<>();
@@ -38,9 +43,11 @@ final class ClientLink implements PluginMessageListener, Listener {
     private final Set<UUID> waiting = new HashSet<>();
     /** Messages for a channel the client has not registered yet; Paper drops those, so they wait for the registration. */
     private final Map<UUID, Map<String, byte[]>> held = new HashMap<>();
-    ClientLink(MaiTycoonPlugin plugin, FullMap map, boolean required, int waitSeconds) {
+    ClientLink(MaiTycoonPlugin plugin, FullMap map, Shop shop, Lamps lamps, boolean required, int waitSeconds) {
         this.plugin = plugin;
         this.map = map;
+        this.shop = shop;
+        this.lamps = lamps;
         this.required = required;
         this.waitSeconds = waitSeconds;
     }
@@ -48,8 +55,11 @@ final class ClientLink implements PluginMessageListener, Listener {
         var messenger = plugin.getServer().getMessenger();
         messenger.registerIncomingPluginChannel(plugin, Wire.HELLO, this);
         messenger.registerIncomingPluginChannel(plugin, Wire.MAP_REQUEST, this);
+        messenger.registerIncomingPluginChannel(plugin, Wire.SHOP_REQUEST, this);
         messenger.registerOutgoingPluginChannel(plugin, Wire.HELLO_ACK);
         messenger.registerOutgoingPluginChannel(plugin, Wire.MAP);
+        messenger.registerOutgoingPluginChannel(plugin, Wire.SHOP);
+        messenger.registerOutgoingPluginChannel(plugin, Wire.SHOP_RESULT);
     }
     boolean connected(Player player) { return sessions.containsKey(player.getUniqueId()); }
     @Override
@@ -58,6 +68,7 @@ final class ClientLink implements PluginMessageListener, Listener {
             switch (channel) {
                 case Wire.HELLO -> hello(player, Wire.hello(message));
                 case Wire.MAP_REQUEST -> map(player, Wire.mapRequest(message));
+                case Wire.SHOP_REQUEST -> plugin.guarded(player, () -> shopRequest(player, Wire.shopRequest(message)));
                 default -> {}
             }
         } catch (IllegalArgumentException e) {
@@ -79,9 +90,11 @@ final class ClientLink implements PluginMessageListener, Listener {
             send(player, Wire.HELLO_ACK, Wire.encode(new Wire.HelloAck(status, Wire.MAJOR, Wire.MINOR, message, List.of())));
             return;
         }
-        sessions.put(id, new Session(hello.major(), hello.minor(), hello.modVersion(), hello.features().contains(Wire.FULL_MAP)));
+        sessions.put(id, new Session(hello.major(), hello.minor(), hello.modVersion(), hello.features().contains(Wire.FULL_MAP), hello.features().contains(Wire.SHOP_FEATURE)));
+        List<String> granted = new ArrayList<>();
+        for (String feature : List.of(Wire.FULL_MAP, Wire.SHOP_FEATURE)) if (hello.features().contains(feature)) granted.add(feature);
         waiting.remove(id);
-        send(player, Wire.HELLO_ACK, Wire.encode(new Wire.HelloAck(Wire.OK, Wire.MAJOR, Math.min(Wire.MINOR, hello.minor()), "", hello.features().contains(Wire.FULL_MAP) ? List.of(Wire.FULL_MAP) : List.of())));
+        send(player, Wire.HELLO_ACK, Wire.encode(new Wire.HelloAck(Wire.OK, Wire.MAJOR, Math.min(Wire.MINOR, hello.minor()), "", granted)));
         plugin.getLogger().info(player.getName() + " joined with client " + hello.modVersion());
     }
     private void map(Player player, Wire.MapRequest request) {
@@ -92,6 +105,41 @@ final class ClientLink implements PluginMessageListener, Listener {
         lastMap.put(player.getUniqueId(), now);
         boolean legacy = sessions.get(player.getUniqueId()).minor() < 1;
         send(player, Wire.MAP, Wire.encode(legacy ? map.data(player, request.requestId(), MAP_HALF, Wire.LEGACY_CELL) : map.data(player, request.requestId(), FINE_HALF, FINE_CELL), legacy));
+    }
+    /** Opens the mod's shop instead of the chest one when the client can show it. */
+    boolean openShop(Player player, int kind) throws IOException {
+        Session session = sessions.get(player.getUniqueId());
+        if (session == null || !session.shop()) return false;
+        openShops.put(player.getUniqueId(), kind);
+        send(player, Wire.SHOP, Wire.encode(snapshot(player, kind, Wire.OPEN)));
+        return true;
+    }
+    private Wire.ShopData snapshot(Player player, int kind, int reason) throws IOException {
+        return kind == Wire.SHOP_LAMP ? lamps.snapshot(player, reason) : shop.snapshot(player, Shop.kindOf(kind), reason);
+    }
+    /** Prices changed: every open mod shop gets the new numbers. */
+    void refreshShops() {
+        for (var entry : new ArrayList<>(openShops.entrySet())) {
+            Player player = plugin.getServer().getPlayer(entry.getKey());
+            if (player != null) plugin.guarded(player, () -> send(player, Wire.SHOP, Wire.encode(snapshot(player, entry.getValue(), Wire.REFRESH))));
+        }
+    }
+    private void shopRequest(Player player, Wire.ShopRequest request) throws IOException {
+        Integer open = openShops.get(player.getUniqueId());
+        if (request.action() == Wire.ACT_CLOSE) { openShops.remove(player.getUniqueId()); return; }
+        if (open == null || open != request.kind()) { reply(player, request, Shop.Outcome.refused("상점이 닫혀 있습니다. NPC를 다시 눌러 주세요."), false); return; }
+        Shop.Outcome outcome = switch (request.action()) {
+            case Wire.ACT_BUY -> request.kind() == Wire.SHOP_LAMP ? lamps.tryBuy(player, request.amount()) : shop.tryBuy(player, Shop.kindOf(request.kind()), request.item(), request.amount());
+            case Wire.ACT_SELL -> request.kind() == Wire.SHOP_SELL ? shop.trySell(player, request.item(), Math.max(0, request.amount())) : Shop.Outcome.refused("이 상점은 사들이지 않습니다.");
+            case Wire.ACT_SELL_ALL -> request.kind() == Wire.SHOP_SELL ? shop.trySellAll(player, request.revision()) : Shop.Outcome.refused("이 상점은 사들이지 않습니다.");
+            case Wire.ACT_REFRESH -> Shop.Outcome.OK;
+            default -> Shop.Outcome.refused("알 수 없는 요청입니다.");
+        };
+        reply(player, request, outcome, true);
+    }
+    private void reply(Player player, Wire.ShopRequest request, Shop.Outcome outcome, boolean refresh) throws IOException {
+        send(player, Wire.SHOP_RESULT, Wire.encode(new Wire.ShopResult(request.requestId(), outcome.status(), outcome.message())));
+        if (refresh) send(player, Wire.SHOP, Wire.encode(snapshot(player, request.kind(), Wire.REFRESH)));
     }
     private void send(Player player, String channel, byte[] bytes) {
         if (player.getListeningPluginChannels().contains(channel)) player.sendPluginMessage(plugin, channel, bytes);
@@ -118,6 +166,7 @@ final class ClientLink implements PluginMessageListener, Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         sessions.remove(id);
+        openShops.remove(id);
         lastMap.remove(id);
         waiting.remove(id);
         held.remove(id);

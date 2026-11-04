@@ -11,14 +11,24 @@ import java.util.List;
  * neither build depends on the other, and both are checked against protocol/vectors.
  */
 public final class Wire {
-    public static final int MAJOR = 1, MINOR = 1, MAX_STRING = 256, MAX_LIST = 32, MAX_SIDE = 128;
+    public static final int MAJOR = 1, MINOR = 2, MAX_STRING = 256, MAX_LIST = 32, MAX_SIDE = 128, MAX_ITEMS = 512;
     public static final String HELLO = "maitycoon:hello", HELLO_ACK = "maitycoon:hello_ack", MAP_REQUEST = "maitycoon:map_request", MAP = "maitycoon:map";
-    public static final String FULL_MAP = "full_map";
+    public static final String SHOP = "maitycoon:shop", SHOP_REQUEST = "maitycoon:shop_request", SHOP_RESULT = "maitycoon:shop_result";
+    public static final String FULL_MAP = "full_map", SHOP_FEATURE = "shop";
+    public static final int SHOP_SELL = 0, SHOP_BUY = 1, SHOP_BUILD = 2, SHOP_FURNITURE = 3, SHOP_LAMP = 4;
+    public static final int OPEN = 0, REFRESH = 1;
+    public static final int ACT_BUY = 0, ACT_SELL = 1, ACT_SELL_ALL = 2, ACT_REFRESH = 3, ACT_CLOSE = 4;
+    public static final int RESULT_OK = 0, RESULT_REFUSED = 1, RESULT_CHANGED = 2;
     public static final int OK = 0, CLIENT_OLD = 1, SERVER_OLD = 2;
     public static final int NONE = 0, MINE = 1, TAKEN = 2, VILLAGE = 3, UNKNOWN = -1;
     public record Hello(int major, int minor, String modVersion, List<String> features) {}
     public record HelloAck(int status, int major, int minor, String message, List<String> features) {}
     public record MapRequest(int requestId) {}
+    /** One product as the shop shows it. material is an item key; model is a custom_model_data string or empty. */
+    public record ShopItem(String id, String name, String category, String material, String model, long price, long change, long floor, long ceiling, int owned, int maxStack, List<String> notes) {}
+    public record ShopData(int reason, int kind, String title, long coins, int revision, int secondsToNext, List<String> tabs, List<ShopItem> items) {}
+    public record ShopRequest(int requestId, int kind, int action, String item, int amount, int revision) {}
+    public record ShopResult(int requestId, int status, String message) {}
     public record Mark(String name, int x, int z) {}
     /** Cells are cellBlocks wide; origin is the north-west cell in cell units. Protocol 1.0 had no cellBlocks and always meant 16. */
     public record MapData(int requestId, int originX, int originZ, int width, int height, int cellBlocks, int[] colors, byte[] overlays, int selfX, int selfZ, List<Mark> players) {}
@@ -37,6 +47,7 @@ public final class Wire {
         Out u8(int value) { range(value, 0xFF); room(1); buffer.put((byte) value); return this; }
         Out u16(int value) { range(value, 0xFFFF); room(2); buffer.putShort((short) value); return this; }
         Out i32(int value) { room(4); buffer.putInt(value); return this; }
+        Out i64(long value) { room(8); buffer.putLong(value); return this; }
         Out str(String value) {
             byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
             if (bytes.length > MAX_STRING) throw new IllegalArgumentException("String too long");
@@ -60,6 +71,7 @@ public final class Wire {
         int u8() { return buffer.get() & 0xFF; }
         int u16() { return buffer.getShort() & 0xFFFF; }
         int i32() { return buffer.getInt(); }
+        long i64() { return buffer.getLong(); }
         String str() {
             int length = u16();
             if (length > MAX_STRING) throw new IllegalArgumentException("String too long");
@@ -95,6 +107,32 @@ public final class Wire {
     public static Hello hello(byte[] bytes) { return decode(bytes, in -> new Hello(in.u16(), in.u16(), in.str(), in.strs())); }
     public static byte[] encode(HelloAck ack) { return new Out().u8(ack.status()).u16(ack.major()).u16(ack.minor()).str(ack.message()).strs(ack.features()).bytes(); }
     public static HelloAck helloAck(byte[] bytes) { return decode(bytes, in -> new HelloAck(in.u8(), in.u16(), in.u16(), in.str(), in.strs())); }
+    public static byte[] encode(ShopData shop) {
+        if (shop.items().size() > MAX_ITEMS) throw new IllegalArgumentException("Too many items");
+        Out out = new Out().u8(shop.reason()).u8(shop.kind()).str(shop.title()).i64(shop.coins()).i32(shop.revision()).i32(shop.secondsToNext()).strs(shop.tabs()).u16(shop.items().size());
+        for (ShopItem item : shop.items()) {
+            out.str(item.id()).str(item.name()).str(item.category()).str(item.material()).str(item.model()).i64(item.price()).i64(item.change()).i64(item.floor()).i64(item.ceiling()).i32(item.owned()).u16(item.maxStack()).strs(item.notes());
+        }
+        return out.bytes();
+    }
+    public static ShopData shop(byte[] bytes) {
+        return decode(bytes, in -> {
+            int reason = in.u8(), kind = in.u8();
+            String title = in.str();
+            long coins = in.i64();
+            int revision = in.i32(), seconds = in.i32();
+            List<String> tabs = in.strs();
+            int count = in.u16();
+            if (count > MAX_ITEMS) throw new IllegalArgumentException("Too many items");
+            List<ShopItem> items = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) items.add(new ShopItem(in.str(), in.str(), in.str(), in.str(), in.str(), in.i64(), in.i64(), in.i64(), in.i64(), in.i32(), in.u16(), in.strs()));
+            return new ShopData(reason, kind, title, coins, revision, seconds, tabs, List.copyOf(items));
+        });
+    }
+    public static byte[] encode(ShopRequest request) { return new Out().i32(request.requestId()).u8(request.kind()).u8(request.action()).str(request.item()).i32(request.amount()).i32(request.revision()).bytes(); }
+    public static ShopRequest shopRequest(byte[] bytes) { return decode(bytes, in -> new ShopRequest(in.i32(), in.u8(), in.u8(), in.str(), in.i32(), in.i32())); }
+    public static byte[] encode(ShopResult result) { return new Out().i32(result.requestId()).u8(result.status()).str(result.message()).bytes(); }
+    public static ShopResult shopResult(byte[] bytes) { return decode(bytes, in -> new ShopResult(in.i32(), in.u8(), in.str())); }
     public static byte[] encode(MapRequest request) { return new Out().i32(request.requestId()).bytes(); }
     public static MapRequest mapRequest(byte[] bytes) { return decode(bytes, in -> new MapRequest(in.i32())); }
     public static byte[] encode(MapData map) { return encode(map, false); }
