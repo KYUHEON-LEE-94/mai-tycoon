@@ -8,16 +8,22 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 
-/** Serves the bundled pack.zip over HTTP and offers it to joining players. Declining it is fine: shops fall back to plain items. */
+/**
+ * Serves the bundled pack.zip over HTTP and offers it to joining players. Declining it is fine: shops fall back to plain items.
+ * With host "auto" each player downloads from the address they connected with, so the same server works from this
+ * machine, the LAN and a VPN share without anyone editing the config.
+ */
 final class ResourcePack implements Listener {
     private final byte[] pack, hash;
-    private final String url;
+    private final String host, name;
+    private final int port;
     private final HttpServer server;
     private final Shop shop;
     ResourcePack(MaiTycoonPlugin plugin, Shop shop, String host, int port) throws IOException {
@@ -29,8 +35,9 @@ final class ResourcePack implements Listener {
         } catch (NoSuchAlgorithmException e) {
             throw new IOException(e);
         }
-        String name = HexFormat.of().formatHex(hash);
-        url = "http://" + host + ":" + port + "/" + name + ".zip";
+        this.host = host;
+        this.port = port;
+        name = HexFormat.of().formatHex(hash);
         // A local host stays off the network; anything else has to accept outside connections.
         var address = host.equals("127.0.0.1") ? new InetSocketAddress(host, port) : new InetSocketAddress(port);
         server = HttpServer.create(address, 0);
@@ -44,9 +51,19 @@ final class ResourcePack implements Listener {
         server.start();
     }
     void stop() { server.stop(0); }
+    /** The address the client typed to reach the server is the one address it can surely reach again. */
+    String url(Player player) {
+        String target = host;
+        if (host.equals("auto")) {
+            var virtual = player.getVirtualHost();
+            String typed = virtual == null ? "" : virtual.getHostString();
+            target = typed.isEmpty() ? "127.0.0.1" : typed.contains(":") ? "[" + typed + "]" : typed;
+        }
+        return "http://" + target + ":" + port + "/" + name + ".zip";
+    }
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        event.getPlayer().setResourcePack(url, hash, Component.text("상점 화면을 꾸며 주는 리소스팩입니다. 받지 않아도 플레이할 수 있습니다."), false);
+        event.getPlayer().setResourcePack(url(event.getPlayer()), hash, Component.text("상점 화면을 꾸며 주는 리소스팩입니다. 받지 않아도 플레이할 수 있습니다."), false);
     }
     @EventHandler
     public void onStatus(PlayerResourcePackStatusEvent event) {

@@ -83,7 +83,7 @@
 ## 상점 화면과 리소스팩
 
 - 접속할 때 상점 화면용 리소스팩을 권합니다. 받으면 전용 화면이, 거절하거나 실패하면 같은 칸 배치의 기본 아이템 GUI가 표시됩니다. 조작은 동일합니다.
-- 팩은 플러그인이 `pack.port`(기본 25580)로 제공합니다. 다른 사람이 접속하는 서버는 `pack.host`를 공인 주소로 바꾸고 포트를 여세요.
+- 팩은 플러그인이 `pack.port`(기본 25580)로 제공합니다. `pack.host`가 `auto`(기본)이면 각 플레이어가 서버에 접속할 때 쓴 주소로 받으므로, 이 컴퓨터·공유기·Tailscale 어느 쪽으로 들어와도 따로 설정할 것이 없습니다. 포트만 함께 열면 됩니다.
 - 칸 배치는 `ShopLayout` 한 곳에서 정의합니다. 화면을 바꾸려면 빌드 후 `java -cp target/classes tools/GeneratePack.java`로 `pack.zip`을 다시 만듭니다.
 - 배경의 한글은 나눔고딕(SIL OFL)으로 그렸습니다. 생성에는 폰트 설치가 필요하고, 배포물에는 이미지만 들어갑니다.
 - 전용 화면은 자체 디자인이며 원본 띵타이쿤 화면이 아닙니다.
@@ -233,4 +233,6 @@
 
 ### 클라이언트 모드팩 검토
 
-[전용 클라이언트 모드와 간편 패키지 배포안](docs/client/CLIENT-MOD-PACKAGING-2026-11-02.md): Paper 유지, Fabric UI 모드, 참가자용 `.mrpack`, 설치·업데이트·호환성 계획입니다. 검증 후 모드 필수 운영으로 결정했습니다. M 키 지도 모드 0.1.0과 서버 0.23.0 연결 기능이 개발되어 있습니다. [진행 기록](docs/client/P0-HANDOFF.md), [호환표](docs/client/COMPATIBILITY.md), [미리보기 설치 안내](distribution/client/INSTALL.md)를 확인하세요. 현재 운영 서버의 참가 방식은 그대로입니다.
+[전용 클라이언트 모드와 간편 패키지 배포안](docs/client/CLIENT-MOD-PACKAGING-2026-11-02.md): Paper 유지, Fabric UI 모드, 참가자용 `.mrpack`, 설치·업데이트·호환성 계획입니다. 검증 후 모드 필수 운영으로 결정했습니다. M 키 지도 모드 0.2.0과 서버 0.23.0 연결 기능이 개발되어 있습니다. [진행 기록](docs/client/P0-HANDOFF.md), [호환표](docs/client/COMPATIBILITY.md), [미리보기 설치 안내](distribution/client/INSTALL.md)를 확인하세요. 현재 운영 서버의 참가 방식은 그대로입니다.
+
+참가자용 간편 설치 ZIP은 `./scripts/package-client.sh`로 생성합니다. 압축을 풀고 Windows는 `install-windows.bat`, Mac은 `install-mac.command`를 실행하면 Fabric과 전용 모드 및 런처 프로필이 설치됩니다. [간편 설치 구현/검증](docs/client/EASY-INSTALL-2026-11-04.md)을 참고하세요.
